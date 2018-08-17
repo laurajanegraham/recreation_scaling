@@ -48,7 +48,8 @@ for(f in fnames) {
                        ras, 
                        'id', 
                        fun=function(x,...)length(x), 
-                       filename = fname)
+                       filename = fname,
+                       overwrite = TRUE)
 }
 ```
 
