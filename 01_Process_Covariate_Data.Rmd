@@ -1,5 +1,5 @@
 ---
-title: "Data Processing"
+title: "Process Covariate Data"
 output: github_document
 ---
 
@@ -10,22 +10,113 @@ knitr::opts_chunk$set(echo = TRUE,
 ```
 
 ```{r load_packages}
+# Libraries
 library(raster)
 library(tidyverse)
+library(gdalUtils)
+library(doParallel)
+library(knitr)
+
+# Analysis resolutions
+rln <- c(1, 5, 10, 25, 50, 100)
+
+# Calculate the number of cores
+no_cores <- detectCores() - 1
 ```
 
 ## General details
 
 We are creating a dataset of social-ecological covariates at a range of spatial resolutions: 1km, 5km, 10km, 25km, 50km, 100km. All data are open. 
 
+## Elevation data
+
+We use [EU-DEM v1.1](https://land.copernicus.eu/pan-european/satellite-derived-products/eu-dem/eu-dem-v1.1/view) at 100m resolution to calculate topographic variability at each resolution. Note that we are using a version that we previously aggregated (mean) to 100m resolution to reduce processing time. We may wish to revisit. 
+
+```{r dem_data}
+dem <- raster("~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif")
+
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("dem"))
+clusterEvalQ(cl, "raster")
+
+# aggregate to each resolution
+parLapply(cl, rln, function(x) {
+  fname <- paste0("data/dem_", x, "km.tif")
+  raster::aggregate(dem, (x*1000)/100, 
+            fun=var, 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
 ## Land-cover data
 
 We use [Corine Land Cover 2012](https://land.copernicus.eu/pan-european/corine-land-cover/clc-2012) at 100m resolution to calculate land-cover diversity at each resolution. 
 
-## Elevation data
+```{r clc_data}
+align_rasters(unaligned = "C:/Users/lg1u16/DATA/LULC/clc2012/g100_clc12_V18_5.tif", 
+              reference = "C:/Users/lg1u16/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif",
+              dstfile = "data/clc_100m.tif",
+              r = "mode",
+              nThreads = "ALL_CPUS",
+              overwrite = TRUE)
 
-We use [EU-DEM v1.1](https://land.copernicus.eu/pan-european/satellite-derived-products/eu-dem/eu-dem-v1.1/view) at 30m resolution to calculate topographic variability at each resolution. 
+clc <- raster("data/clc_100m.tif")
+
+ 
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster", "grainchanger"))
+
+# aggregate to each resolution
+parLapply(cl, rln, function(x) {
+  fname <- paste0("data/clc_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) grainchanger::diversity(y, lc_class = 1:44), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
 
 ## Population data
 
-We use [Population density disaggregated with Corine land cover 2000](https://www.eea.europa.eu/data-and-maps/data/population-density-disaggregated-with-corine-land-cover-2000-2) at xx resolution to calculate total population at each resolution. 
+We use [Population density disaggregated with Corine land cover 2000](https://www.eea.europa.eu/data-and-maps/data/population-density-disaggregated-with-corine-land-cover-2000-2) at 100m resolution to calculate total population at each resolution. 
+
+```{r pop_data}
+align_rasters(unaligned = "C:/Users/lg1u16/DATA/SOCIAL/EEA_gridded_population/popu01clcv5.tif", 
+                     reference = "C:/Users/lg1u16/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif",
+                     dstfile = "data/pop_100m.tif",
+                     nThreads = "ALL_CPUS")
+
+pop <- raster("data/pop_100m.tif")
+
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("pop"))
+clusterEvalQ(cl, "raster")
+
+# aggregate to each resolution
+parLapply(cl, rln, function(x) {
+  fname <- paste0("data/pop_", x, "km.tif")
+  raster::aggregate(pop, (x*1000)/100, 
+            fun=sum, 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+## Session Info
+
+```{r session_info}
+session <- devtools::session_info()
+session[[1]]
+session[[2]] %>% kable
+```

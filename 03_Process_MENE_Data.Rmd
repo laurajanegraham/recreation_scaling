@@ -1,0 +1,61 @@
+---
+title: "Process MENE Data"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+```{r load_packages}
+# Libraries
+library(raster)
+library(tidyverse)
+library(knitr)
+library(sf)
+```
+
+## MENE recreation visits data
+
+The data for the recreation visits come from the [Monitor of Engagement with the Natural Environment (MENE) survey](https://www.gov.uk/government/collections/monitor-of-engagement-with-the-natural-environment-survey-purpose-and-results). At present, I've not filtered other than to remove records which do not have locations. This means we have point locations of visits across all years the survey was run, and these are of all types. 
+
+```{r rec_data}
+visits_sf <- read_csv("data/mene_vists.csv") %>% 
+  select(id = id2,
+         x = DESTINATION_EASTING,
+         y = DESTINATION_NORTHING,
+         year, Visitdate) %>% 
+  na.omit %>% 
+  st_as_sf(coords = c("x", "y"), crs = 27700) %>% 
+  st_transform(crs = 3035)
+
+visits_sp <- as(visits_sf, "Spatial")
+```
+
+We need to convert from points to raster at the 6 analysis resolutions.
+
+```{r rec_rasters}
+# loop through the dem files to get rasters for the visits
+fnames <- list.files("data", pattern = "dem", full.names = TRUE)
+
+for(f in fnames) {
+  ras <- raster(f)
+  rln <- res(ras)/1000
+  fname <- paste0("data/mene_", rln[1], "km.tif")
+  rec_ras <- rasterize(visits_sp, 
+                       ras, 
+                       'id', 
+                       fun=function(x,...)length(x), 
+                       filename = fname)
+}
+```
+
+## Session Info
+
+```{r session_info}
+session <- devtools::session_info()
+session[[1]]
+session[[2]] %>% kable
+```

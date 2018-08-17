@@ -1,0 +1,28 @@
+---
+title: "Process Wessex BESS data"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+```{r load_packages}
+# Libraries
+library(raster)
+library(tidyverse)
+library(gdalUtils)
+library(doParallel)
+library(knitr)
+library(sf)
+```
+
+## Session Info
+
+```{r session_info}
+session <- devtools::session_info()
+session[[1]]
+session[[2]] %>% kable
+```
