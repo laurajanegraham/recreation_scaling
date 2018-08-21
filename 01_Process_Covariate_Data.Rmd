@@ -34,17 +34,36 @@ We use [EU-DEM v1.1](https://land.copernicus.eu/pan-european/satellite-derived-p
 
 ```{r dem_data}
 dem <- raster("~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif")
+```
 
+```{r dem_var}
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("dem"))
 clusterEvalQ(cl, "raster")
 
 # aggregate to each resolution
-parLapply(cl, rln, function(x) {
-  fname <- paste0("data/dem_", x, "km.tif")
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/dem_var_", x, "km.tif")
   raster::aggregate(dem, (x*1000)/100, 
             fun=var, 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+```{r dem_mean}
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("dem"))
+clusterEvalQ(cl, "raster")
+
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/dem_mean_", x, "km.tif")
+  raster::aggregate(dem, (x*1000)/100, 
+            fun=mean, 
             filename = fname,
             overwrite = TRUE)
 })
@@ -65,18 +84,37 @@ align_rasters(unaligned = "C:/Users/lg1u16/DATA/LULC/clc2012/g100_clc12_V18_5.ti
               overwrite = TRUE)
 
 clc <- raster("data/clc_100m.tif")
+```
 
- 
+```{r clc_shei}
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("clc"))
 clusterEvalQ(cl, c("raster", "grainchanger"))
 
 # aggregate to each resolution
-parLapply(cl, rln, function(x) {
-  fname <- paste0("data/clc_", x, "km.tif")
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/clc_shei_", x, "km.tif")
   raster::aggregate(clc, (x*1000)/100, 
             fun=function(y, ...) grainchanger::diversity(y, lc_class = 1:44), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+```{r clc_prop}
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster", "grainchanger"))
+
+# get the proportion of non-urban cover (10-44)
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/clc_prop_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 10:44), 
             filename = fname,
             overwrite = TRUE)
 })
@@ -95,14 +133,16 @@ align_rasters(unaligned = "C:/Users/lg1u16/DATA/SOCIAL/EEA_gridded_population/po
                      nThreads = "ALL_CPUS")
 
 pop <- raster("data/pop_100m.tif")
+```
 
+```{r pop_total}
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("pop"))
 clusterEvalQ(cl, "raster")
 
 # aggregate to each resolution
-parLapply(cl, rln, function(x) {
+out <- parLapply(cl, rln, function(x) {
   fname <- paste0("data/pop_", x, "km.tif")
   raster::aggregate(pop, (x*1000)/100, 
             fun=sum, 

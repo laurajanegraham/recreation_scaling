@@ -9,7 +9,7 @@ library(tidyverse)
 library(GGally)
 library(broom)
 library(MuMIn)
-
+library(knitr)
 
 # resolutions
 rlns <- c("1km", "5km", "10km", "25km", "50km", "100km")
@@ -48,7 +48,14 @@ get_df <- function(rln) {
 }
 
 # dataframe with obs for all data
-df <- map_dfr(rlns, get_df)
+df <- map_dfr(rlns, get_df) %>% 
+  mutate(resolution = factor(resolution, 
+                             levels = c("1km", 
+                                        "5km", 
+                                        "10km", 
+                                        "25km", 
+                                        "50km", 
+                                        "100km")))
 ```
 
 Data exploration
@@ -72,13 +79,13 @@ df %>%
 
     ## # A tibble: 6 x 2
     ##   resolution count
-    ##   <chr>      <int>
-    ## 1 100km         24
-    ## 2 10km        1120
-    ## 3 1km         5153
+    ##   <fct>      <int>
+    ## 1 1km         5153
+    ## 2 5km         2373
+    ## 3 10km        1120
     ## 4 25km         254
     ## 5 50km          78
-    ## 6 5km         2373
+    ## 6 100km         24
 
 Based on the distributions, we can fit models for all resolutions, but for the larger two (50km and 100km), n is very small.
 
@@ -103,7 +110,7 @@ Finally, lets look at the relationships between variables:
 ``` r
 p <- list()
 for(r in rlns) {
-  p[[r]] <- ggpairs(df %>% filter(resolution == r) %>% select(-resolution, -x, -y))
+  p[[r]] <- ggpairs(df %>% filter(resolution == r) %>% select(-resolution, -x, -y), progress = FALSE)
 }
 
 p
@@ -138,7 +145,7 @@ p
 
 ![](06_MENE_Models_files/figure-markdown_github/var_relationships-6.png)
 
-Seems that it's population that is the strongest predictor at all resolutions, and that this effect increases with spatial resolution. LC diversity is second, with similar effect.
+Seems that it's population and proportion of non-built land covers that are the strongest predictor at all resolutions, and that this effect increases with spatial resolution. LC diversity is next, with similar effect. Note that population density and proportion of non-built land covers are highly correlated at all resolutions except for 50km and 100km.
 
 Statistical Models
 ------------------
@@ -147,14 +154,15 @@ To start, we will fit poisson GLMs with all three covariates and their first-ord
 
 ``` r
 fit_mod <- function(dat) {
-  glm.nb(mene ~ clc * pop, 
-      data = dat)
+  glm(mene ~ clc_prop + clc_shei + dem_mean + pop,
+      data = dat,
+      family = "poisson")
 }
 
 scale_cols <- function(x) {
   scale_this <- function(y) as.vector(scale(y))
-  x <- mutate(x, pop = log10(pop + 1))
-  mutate_at(x, .vars = vars(clc, dem, pop), .funs = funs(scale_this))
+  #x <- mutate(x, pop = log10(pop + 1))
+  mutate_at(x, .vars = vars(-mene), .funs = funs(scale_this))
 }
 
 # get the CA function
@@ -189,7 +197,7 @@ mod <- df %>%
          mod_glance = map(mod, glance),
          mod_stats = map(mod, get_mod_stats),
          mod_resid = map(mod, resid),
-         resolution = factor(resolution, levels = c("1km", "5km", "10km", "25km", "50km", "100km")))
+         mod_fitted = map(mod, fitted))
 
 mod_D2 <- mod %>%
   select(resolution, mod_glance) %>% 
@@ -227,6 +235,8 @@ ggplot(mod_stats, aes(x = resolution, y = Total/D2, fill = variable)) +
 
 ![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-2-1.png)
 
+Population explains the most variation at all resolutions. Proportion of non-built land covers explains a large amount of variation at all but the coarsest resolutions (50km, 100km). The importance of land-cover diversity increases with spatial resolution (decreasing again at 100km, but this probably related to high correlation with proportion and small sample size). Finally, topography does not have a huge importance in the models, but mean elevation explains the most variation at 1km, this then decreases until little to no variance is explained at 100km. Variation in topography explains the least variance at all resolutions.
+
 What about the relationships?
 
 ``` r
@@ -239,37 +249,43 @@ ggplot(mod_stats, aes(x = resolution, y = coef)) +
 
 ![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-3-1.png)
 
-Bright/dark spots? Plot residuals &lt; 10th (dark) and &gt; 90th (bright) percentiles.
+Some scale dependencies. Probably need to check they are not entirely statistical artefacts.
+
+Bright & dark spots
+-------------------
+
+Following Frei et al. (2018) and Cinner et al. (2016), we calculate bright spots and dark spots. We define bright/dark spots as those where the observed value is +/- 1SD (of observed values) from the expected value.
 
 ``` r
-np <- st_read("~/DATA/ADMINISTRATIVE/national_parks_england/National_Parks_England.shp", 
-              quiet = TRUE) %>% 
+np <- st_read("~/DATA/ADMINISTRATIVE/national_parks_england/National_Parks_England.shp",
+              quiet = TRUE) %>%
   st_transform(st_crs(study_ext_sf))
-
-cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
-                  quiet = TRUE) %>% 
-  st_transform(st_crs(study_ext_sf)) %>% 
-  st_centroid %>% 
-  filter(tcity15nm == "London")
+# 
+# cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
+#                   quiet = TRUE) %>% 
+#   st_transform(st_crs(study_ext_sf)) %>% 
+#   st_centroid %>% 
+#   filter(tcity15nm == "London")
 
 aonb <- st_read("~/DATA/ADMINISTRATIVE/aonb_england/Areas_of_Outstanding_Natural_Beauty_England.shp",
-                quiet = TRUE) %>% 
+                quiet = TRUE) %>%
   st_transform(st_crs(study_ext_sf))
 
-mod_resid <- mod %>% 
-  select(resolution, data, mod_resid) %>% 
+mod_fitted <- mod %>% 
+  select(resolution, data, mod_fitted, mod_resid) %>% 
   unnest() %>% 
   group_by(resolution) %>% 
-  mutate(resid_bin = case_when(mod_resid < quantile(mod_resid, 0.1) ~ "Dark",
-                               mod_resid > quantile(mod_resid, 0.9) ~ "Bright",
+  mutate(diff = mod_fitted - mene,
+         bd_spots = case_when(diff < -sd(mene) ~ "Dark",
+                               diff > sd(mene) ~ "Bright",
                                TRUE ~ "Neutral"))
 
 ggplot() + 
-  geom_raster(data = mod_resid %>% filter(!resolution %in% c("1km", "5km")), 
-              aes(x = x, y = y, fill = resid_bin)) + 
-  geom_sf(data = np, colour = "black", fill = NA) + 
-  geom_sf(data = cities, colour = "black") + 
-  geom_sf(data = aonb, colour = "black", fill = NA) + 
+  geom_raster(data = mod_fitted, 
+              aes(x = x, y = y, fill = bd_spots)) + 
+  #geom_sf(data = np, colour = "black", fill = NA) + 
+  #geom_sf(data = cities, colour = "black") + 
+  #geom_sf(data = aonb, colour = "black", fill = NA) + 
   geom_sf(data = study_ext_sf, fill = NA) + 
   facet_wrap(~resolution) + 
   scale_fill_manual(values = c("orange", "blue", "grey")) + 
@@ -280,11 +296,40 @@ ggplot() +
 
 ![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-4-1.png)
 
-We probably want to get rid of cells which are &lt; certain threshold land (dark spots in 50km and 100km maps likely down to this rather than actual dark spots).
+``` r
+ggplot(mod_fitted, aes(x = mod_fitted, y = mene)) + 
+  geom_point(aes(colour = bd_spots)) + 
+  scale_colour_manual(values = c("orange", "blue", "grey")) + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~resolution, scales = "free")
+```
 
-Some of the bright spots are within, or near National Parks or AONBs (black polygons). Bright spots around London - which corresponds with the clustering of records we saw around London in the raw data. Does this suggest that the relationship with population is not given enough weighting?
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-4-2.png)
+
+``` r
+group_by(mod_fitted, resolution) %>% 
+  summarise(Bright = sum(bd_spots == "Bright"),
+            Dark = sum(bd_spots == "Dark"),
+            Total = n(),
+            `Bright %` = (Bright/Total)*100,
+            `Dark %` = (Dark/Total)*100) %>% 
+  kable
+```
+
+| resolution |  Bright|  Dark|  Total|   Bright %|    Dark %|
+|:-----------|-------:|-----:|------:|----------:|---------:|
+| 1km        |      37|   436|   5153|  0.7180283|  8.461091|
+| 5km        |      69|   156|   2373|  2.9077118|  6.573957|
+| 10km       |      27|    66|   1120|  2.4107143|  5.892857|
+| 25km       |       4|     7|    254|  1.5748031|  2.755905|
+| 50km       |       2|     1|     78|  2.5641026|  1.282051|
+| 100km      |       0|     0|     24|  0.0000000|  0.000000|
 
 References
 ----------
+
+Cinner, Joshua E., Cindy Huchery, M. Aaron MacNeil, Nicholas A.J. Graham, Tim R. McClanahan, Joseph Maina, Eva Maire, et al. 2016. “Bright spots among the world’s coral reefs.” *Nature* 535 (7612). Nature Publishing Group: 416–19. doi:[10.1038/nature18607](https://doi.org/10.1038/nature18607).
+
+Frei, Barbara, Delphine Renard, Matthew G. E. Mitchell, Verena Seufert, Rebecca Chaplin-Kramer, Jeanine M. Rhemtulla, and Elena M. Bennett. 2018. “Bright spots in agricultural landscapes: Identifying areas exceeding expectations for multifunctionality and biodiversity.” *Journal of Applied Ecology*, no. February: 1–13. doi:[10.1111/1365-2664.13191](https://doi.org/10.1111/1365-2664.13191).
 
 Guisan, Antoine, and Niklaus E Zimmermann. 2000. “Predictive habitat distribution models in ecology.” *Ecological Modelling* 135 (2–3): 147–86. doi:[10.1016/s0304-3800(00)00354-9](https://doi.org/10.1016/s0304-3800(00)00354-9).

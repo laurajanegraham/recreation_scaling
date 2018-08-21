@@ -28,17 +28,36 @@ We use [EU-DEM v1.1](https://land.copernicus.eu/pan-european/satellite-derived-p
 
 ``` r
 dem <- raster("~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif")
+```
 
+``` r
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("dem"))
 clusterEvalQ(cl, "raster")
 
 # aggregate to each resolution
-parLapply(cl, rln, function(x) {
-  fname <- paste0("data/dem_", x, "km.tif")
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/dem_var_", x, "km.tif")
   raster::aggregate(dem, (x*1000)/100, 
             fun=var, 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+``` r
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("dem"))
+clusterEvalQ(cl, "raster")
+
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/dem_mean_", x, "km.tif")
+  raster::aggregate(dem, (x*1000)/100, 
+            fun=mean, 
             filename = fname,
             overwrite = TRUE)
 })
@@ -60,18 +79,37 @@ align_rasters(unaligned = "C:/Users/lg1u16/DATA/LULC/clc2012/g100_clc12_V18_5.ti
               overwrite = TRUE)
 
 clc <- raster("data/clc_100m.tif")
+```
 
- 
+``` r
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("clc"))
 clusterEvalQ(cl, c("raster", "grainchanger"))
 
 # aggregate to each resolution
-parLapply(cl, rln, function(x) {
-  fname <- paste0("data/clc_", x, "km.tif")
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/clc_shei_", x, "km.tif")
   raster::aggregate(clc, (x*1000)/100, 
             fun=function(y, ...) grainchanger::diversity(y, lc_class = 1:44), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+``` r
+# Initiate cluster
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster", "grainchanger"))
+
+# get the proportion of non-urban cover (10-44)
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/clc_prop_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 10:44), 
             filename = fname,
             overwrite = TRUE)
 })
@@ -89,105 +127,25 @@ align_rasters(unaligned = "C:/Users/lg1u16/DATA/SOCIAL/EEA_gridded_population/po
                      reference = "C:/Users/lg1u16/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif",
                      dstfile = "data/pop_100m.tif",
                      nThreads = "ALL_CPUS")
+
+pop <- raster("data/pop_100m.tif")
 ```
 
-    ## NULL
-
 ``` r
-pop <- raster("data/pop_100m.tif")
-
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("pop"))
 clusterEvalQ(cl, "raster")
-```
 
-    ## [[1]]
-    ## [1] "raster"
-    ## 
-    ## [[2]]
-    ## [1] "raster"
-    ## 
-    ## [[3]]
-    ## [1] "raster"
-
-``` r
 # aggregate to each resolution
-parLapply(cl, rln, function(x) {
+out <- parLapply(cl, rln, function(x) {
   fname <- paste0("data/pop_", x, "km.tif")
   raster::aggregate(pop, (x*1000)/100, 
             fun=sum, 
             filename = fname,
             overwrite = TRUE)
 })
-```
 
-    ## [[1]]
-    ## class       : RasterLayer 
-    ## dimensions  : 3878, 3878, 15038884  (nrow, ncol, ncell)
-    ## resolution  : 1000, 1000  (x, y)
-    ## extent      : 2603525, 6481525, 1494900, 5372900  (xmin, xmax, ymin, ymax)
-    ## coord. ref. : +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
-    ## data source : C:\Users\lg1u16\GIT_PROJECTS\SCALEFORES\recreation_scaling\data\pop_1km.tif 
-    ## names       : pop_1km 
-    ## values      : 0, 4072700  (min, max)
-    ## 
-    ## 
-    ## [[2]]
-    ## class       : RasterLayer 
-    ## dimensions  : 776, 776, 602176  (nrow, ncol, ncell)
-    ## resolution  : 5000, 5000  (x, y)
-    ## extent      : 2603525, 6483525, 1492900, 5372900  (xmin, xmax, ymin, ymax)
-    ## coord. ref. : +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
-    ## data source : C:\Users\lg1u16\GIT_PROJECTS\SCALEFORES\recreation_scaling\data\pop_5km.tif 
-    ## names       : pop_5km 
-    ## values      : 0, 66105183  (min, max)
-    ## 
-    ## 
-    ## [[3]]
-    ## class       : RasterLayer 
-    ## dimensions  : 388, 388, 150544  (nrow, ncol, ncell)
-    ## resolution  : 10000, 10000  (x, y)
-    ## extent      : 2603525, 6483525, 1492900, 5372900  (xmin, xmax, ymin, ymax)
-    ## coord. ref. : +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
-    ## data source : C:\Users\lg1u16\GIT_PROJECTS\SCALEFORES\recreation_scaling\data\pop_10km.tif 
-    ## names       : pop_10km 
-    ## values      : 0, 187955505  (min, max)
-    ## 
-    ## 
-    ## [[4]]
-    ## class       : RasterLayer 
-    ## dimensions  : 156, 156, 24336  (nrow, ncol, ncell)
-    ## resolution  : 25000, 25000  (x, y)
-    ## extent      : 2603525, 6503525, 1472900, 5372900  (xmin, xmax, ymin, ymax)
-    ## coord. ref. : +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
-    ## data source : C:\Users\lg1u16\GIT_PROJECTS\SCALEFORES\recreation_scaling\data\pop_25km.tif 
-    ## names       : pop_25km 
-    ## values      : 0, 530242916  (min, max)
-    ## 
-    ## 
-    ## [[5]]
-    ## class       : RasterLayer 
-    ## dimensions  : 78, 78, 6084  (nrow, ncol, ncell)
-    ## resolution  : 50000, 50000  (x, y)
-    ## extent      : 2603525, 6503525, 1472900, 5372900  (xmin, xmax, ymin, ymax)
-    ## coord. ref. : +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
-    ## data source : C:\Users\lg1u16\GIT_PROJECTS\SCALEFORES\recreation_scaling\data\pop_50km.tif 
-    ## names       : pop_50km 
-    ## values      : 0, 755303241  (min, max)
-    ## 
-    ## 
-    ## [[6]]
-    ## class       : RasterLayer 
-    ## dimensions  : 39, 39, 1521  (nrow, ncol, ncell)
-    ## resolution  : 1e+05, 1e+05  (x, y)
-    ## extent      : 2603525, 6503525, 1472900, 5372900  (xmin, xmax, ymin, ymax)
-    ## coord. ref. : +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
-    ## data source : C:\Users\lg1u16\GIT_PROJECTS\SCALEFORES\recreation_scaling\data\pop_100km.tif 
-    ## names       : pop_100km 
-    ## values      : 0, 1046067791  (min, max)
-
-``` r
 stopCluster(cl)
 ```
 
@@ -206,7 +164,7 @@ session[[1]]
     ##  language (EN)                        
     ##  collate  English_United Kingdom.1252 
     ##  tz       Europe/London               
-    ##  date     2018-08-16
+    ##  date     2018-08-21
 
 ``` r
 session[[2]] %>% kable
