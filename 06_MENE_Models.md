@@ -150,18 +150,18 @@ Seems that it's population and proportion of non-built land covers that are the 
 Statistical Models
 ------------------
 
-To start, we will fit poisson GLMs with all three covariates and their first-order interactions as the full model.
+We will fit negative binomial GLMs (due to overdispersion) with proportion of non-built land cover (clc\_prop), mean elevation (dem\_mean) and population (pop) and their first-order interactions as the full model.
 
 ``` r
 fit_mod <- function(dat) {
-  glm(mene ~ clc_prop + clc_shei + dem_mean + pop,
-      data = dat,
-      family = "poisson")
+  glm(mene ~ clc_prop * dem_mean + clc_prop * pop + dem_mean * pop,
+      family = "poisson",
+      data = dat)
 }
 
 scale_cols <- function(x) {
   scale_this <- function(y) as.vector(scale(y))
-  #x <- mutate(x, pop = log10(pop + 1))
+  x <- x %>% mutate(pop = log(pop + 1))
   mutate_at(x, .vars = vars(-mene), .funs = funs(scale_this))
 }
 
@@ -223,9 +223,11 @@ ggplot(mod_D2, aes(x = resolution, y = D2, group = 1)) +
 
 ![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-1-1.png)
 
-Explanatory power of the model increases greatly between 1km and 5km resolutions (with increasing explanatory power as resolution increases, as to be expected).
+Explanatory power of the model increases greatly between 1km and 5km resolutions (with increasing explanatory power as resolution increases, as to be expected). Might be best to drop the 1km model.
 
 What about the relative importances?
+
+NB This plot shows the proportion of variance explained by each variable of the total variance explained. It's greater than 1 because there are shared explained variances
 
 ``` r
 ggplot(mod_stats, aes(x = resolution, y = Total/D2, fill = variable)) + 
@@ -235,7 +237,20 @@ ggplot(mod_stats, aes(x = resolution, y = Total/D2, fill = variable)) +
 
 ![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-2-1.png)
 
-Population explains the most variation at all resolutions. Proportion of non-built land covers explains a large amount of variation at all but the coarsest resolutions (50km, 100km). The importance of land-cover diversity increases with spatial resolution (decreasing again at 100km, but this probably related to high correlation with proportion and small sample size). Finally, topography does not have a huge importance in the models, but mean elevation explains the most variation at 1km, this then decreases until little to no variance is explained at 100km. Variation in topography explains the least variance at all resolutions.
+-   Importance of population increases slightly with spatial resolution. This explains the most variation in all cases
+-   Importance of topography decreases with spatial resolution
+-   Importance of non-built land covers decreases with spatial resolution (although increasing between 1km and 5km, but we may drop the 1km model)
+-   First-order interactions are most important at intermediate resolutions (in particular the interaction between proportion of non-built land covers and population - some concerns around correlation between these, particularly at 25km resolution)
+
+This one is without standardising by the total variance explained.
+
+``` r
+ggplot(mod_stats, aes(x = resolution, y = Total, fill = variable)) + 
+  scale_fill_viridis_d() + 
+  geom_bar(stat = "identity", position = "stack")
+```
+
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-3-1.png)
 
 What about the relationships?
 
@@ -247,7 +262,7 @@ ggplot(mod_stats, aes(x = resolution, y = coef)) +
   facet_wrap(~variable, nrow = 1)
 ```
 
-![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-3-1.png)
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-4-1.png)
 
 Some scale dependencies. Probably need to check they are not entirely statistical artefacts.
 
@@ -257,21 +272,7 @@ Bright & dark spots
 Following Frei et al. (2018) and Cinner et al. (2016), we calculate bright spots and dark spots. We define bright/dark spots as those where the observed value is +/- 1SD (of observed values) from the expected value.
 
 ``` r
-np <- st_read("~/DATA/ADMINISTRATIVE/national_parks_england/National_Parks_England.shp",
-              quiet = TRUE) %>%
-  st_transform(st_crs(study_ext_sf))
-# 
-# cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
-#                   quiet = TRUE) %>% 
-#   st_transform(st_crs(study_ext_sf)) %>% 
-#   st_centroid %>% 
-#   filter(tcity15nm == "London")
-
-aonb <- st_read("~/DATA/ADMINISTRATIVE/aonb_england/Areas_of_Outstanding_Natural_Beauty_England.shp",
-                quiet = TRUE) %>%
-  st_transform(st_crs(study_ext_sf))
-
-mod_fitted <- mod %>% 
+bd_spots <- mod %>% 
   select(resolution, data, mod_fitted, mod_resid) %>% 
   unnest() %>% 
   group_by(resolution) %>% 
@@ -280,12 +281,27 @@ mod_fitted <- mod %>%
                                diff > sd(mene) ~ "Bright",
                                TRUE ~ "Neutral"))
 
+# potentially explanatory spatial layers
+# np <- st_read("~/DATA/ADMINISTRATIVE/national_parks_england/National_Parks_England.shp",
+#               quiet = TRUE) %>%
+#   st_transform(st_crs(study_ext_sf))
+# 
+# aonb <- st_read("~/DATA/ADMINISTRATIVE/aonb_england/Areas_of_Outstanding_Natural_Beauty_England.shp",
+#                 quiet = TRUE) %>%
+#   st_transform(st_crs(study_ext_sf))
+
+cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
+                  quiet = TRUE) %>%
+  st_transform(st_crs(study_ext_sf)) %>%
+  st_centroid %>%
+  filter(tcity15nm %in% c("Birmingham", "Leeds", "London", "Manchester", "Newcastle upon Tyne"))
+
 ggplot() + 
-  geom_raster(data = mod_fitted, 
+  geom_raster(data = bd_spots, 
               aes(x = x, y = y, fill = bd_spots)) + 
   #geom_sf(data = np, colour = "black", fill = NA) + 
-  #geom_sf(data = cities, colour = "black") + 
   #geom_sf(data = aonb, colour = "black", fill = NA) + 
+  geom_sf(data = cities, colour = "black", fill = NA) + 
   geom_sf(data = study_ext_sf, fill = NA) + 
   facet_wrap(~resolution) + 
   scale_fill_manual(values = c("orange", "blue", "grey")) + 
@@ -294,36 +310,93 @@ ggplot() +
         axis.ticks = element_blank())
 ```
 
-![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-4-1.png)
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-5-1.png)
+
+Cities marked out: London, Birmingham, Manchester, Leeds, Newcastle upon Tyne.
 
 ``` r
-ggplot(mod_fitted, aes(x = mod_fitted, y = mene)) + 
+ggplot(bd_spots, aes(x = mod_fitted, y = mene)) + 
   geom_point(aes(colour = bd_spots)) + 
   scale_colour_manual(values = c("orange", "blue", "grey")) + 
   geom_smooth(method = "lm") + 
   facet_wrap(~resolution, scales = "free")
 ```
 
-![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-4-2.png)
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-6-1.png)
+
+Scale dependency in the % of bright/dark spots?
 
 ``` r
-group_by(mod_fitted, resolution) %>% 
+bd_summary <- group_by(bd_spots, resolution) %>% 
   summarise(Bright = sum(bd_spots == "Bright"),
             Dark = sum(bd_spots == "Dark"),
             Total = n(),
             `Bright %` = (Bright/Total)*100,
             `Dark %` = (Dark/Total)*100) %>% 
-  kable
+  gather(key, value, -resolution, -Bright, -Dark, -Total)
+
+ggplot(bd_summary, aes(x = resolution, y = value, colour = key, group = key)) + 
+  geom_point() + 
+  scale_colour_manual(values = c("orange", "blue", "grey")) + 
+  stat_summary(fun.y=sum, geom="line") + 
+  ylab("% of total area")
 ```
 
-| resolution |  Bright|  Dark|  Total|   Bright %|    Dark %|
-|:-----------|-------:|-----:|------:|----------:|---------:|
-| 1km        |      37|   436|   5153|  0.7180283|  8.461091|
-| 5km        |      69|   156|   2373|  2.9077118|  6.573957|
-| 10km       |      27|    66|   1120|  2.4107143|  5.892857|
-| 25km       |       4|     7|    254|  1.5748031|  2.755905|
-| 50km       |       2|     1|     78|  2.5641026|  1.282051|
-| 100km      |       0|     0|     24|  0.0000000|  0.000000|
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-7-1.png)
+
+Hot & cold spots
+----------------
+
+These are the areas of maximum and minimum service provision. I'm defining hot/cold spots as those cells in the top/bottom 5%.
+
+I'm not 100% convinced by this because of the skewed distribution.
+
+``` r
+hc_spots <- df %>% 
+  group_by(resolution) %>% 
+  mutate(hc_spots = case_when(mene < quantile(mene, 0.1) ~ "Cold",
+                               mene > quantile(mene, 0.9) ~ "Hot",
+                               TRUE ~ "Neutral"))
+```
+
+``` r
+ggplot() + 
+  geom_raster(data = hc_spots, 
+              aes(x = x, y = y, fill = hc_spots)) + 
+  #geom_sf(data = np, colour = "black", fill = NA) + 
+  #geom_sf(data = aonb, colour = "black", fill = NA) + 
+  geom_sf(data = cities, colour = "black", fill = NA) + 
+  geom_sf(data = study_ext_sf, fill = NA) + 
+  facet_wrap(~resolution) + 
+  scale_fill_manual(values = c("blue", "orange", "grey")) + 
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-9-1.png)
+
+Problem in that coastal areas come out as cold spots, but that's an area thing. Might need to remove cells which are not 100% on land.
+
+Scale dependency in the % of hot/cold spots?
+
+``` r
+hc_summary <- group_by(hc_spots, resolution) %>% 
+  summarise(Hot = sum(hc_spots == "Hot"),
+            Cold = sum(hc_spots == "Cold"),
+            Total = n(),
+            `Hot %` = (Hot/Total)*100,
+            `Cold %` = (Cold/Total)*100) %>% 
+  gather(key, value, -resolution, -Hot, -Cold, -Total)
+
+ggplot(hc_summary, aes(x = resolution, y = value, colour = key, group = key)) + 
+  geom_point() + 
+  scale_colour_manual(values = c("blue", "orange", "grey")) + 
+  stat_summary(fun.y=sum, geom="line") + 
+  ylab("% of total area")
+```
+
+![](06_MENE_Models_files/figure-markdown_github/unnamed-chunk-10-1.png)
 
 References
 ----------
