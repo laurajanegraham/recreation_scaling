@@ -33,12 +33,13 @@ study_ext <- as(study_ext_sf, "Spatial")
 
 ## Data collating
 
-We're making one big dataframe of the response (MENE visits) and covariates (landcover diversity, topographical variation and population density) at each of the analysis resolutions. 
+We're making one big dataframe of the response (MENE visits) and  covariates (proportion of non-built land covers, land-cover diversity, mean elevation, topographic variation and population density) at each of the analysis resolutions. 
 
 ```{r get_data}
 get_df <- function(rln) {
   # list all files of specified resolution
-  fnames <- list.files("data", pattern = paste0("_", rln), full.names = TRUE)
+    fnames <- list.files("data/covariates", pattern = paste0("_", rln), full.names = TRUE)
+  fnames <- c(fnames, paste0("data/response/mene_", rln, ".tif"))
   
   # stack them
   dat <- stack(fnames)
@@ -341,3 +342,11 @@ ggplot(hc_summary, aes(x = resolution, y = value, colour = key, group = key)) +
 ```
 
 ## References
+
+## Session Info
+
+```{r session_info}
+session <- devtools::session_info()
+session[[1]]
+session[[2]] %>% kable
+```

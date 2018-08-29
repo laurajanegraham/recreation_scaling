@@ -38,7 +38,7 @@ We need to convert from points to raster at the 6 analysis resolutions.
 
 ```{r rec_rasters}
 # loop through the dem files to get rasters for the visits
-fnames <- list.files("data", pattern = "dem", full.names = TRUE)
+fnames <- list.files("data", pattern = "dem_mean", full.names = TRUE)
 
 for(f in fnames) {
   ras <- raster(f)
