@@ -68,18 +68,22 @@ stopCluster(cl)
 Land-cover data
 ---------------
 
-We use [Corine Land Cover 2012](https://land.copernicus.eu/pan-european/corine-land-cover/clc-2012) at 100m resolution to calculate land-cover diversity at each resolution.
+We use [Corine Land Cover 2012](https://land.copernicus.eu/pan-european/corine-land-cover/clc-2012) at 100m resolution to calculate land-cover proportions and diversity at each resolution.
 
 ``` r
 align_rasters(unaligned = "C:/Users/lg1u16/DATA/LULC/clc2012/g100_clc12_V18_5.tif", 
               reference = "C:/Users/lg1u16/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif",
-              dstfile = "data/clc_100m.tif",
+              dstfile = "data/covariates/clc_100m.tif",
               r = "mode",
               nThreads = "ALL_CPUS",
               overwrite = TRUE)
-
-clc <- raster("data/clc_100m.tif")
 ```
+
+``` r
+clc <- raster("data/covariates/clc_100m.tif")
+```
+
+### Land-cover diversity
 
 ``` r
 # Initiate cluster
@@ -89,7 +93,7 @@ clusterEvalQ(cl, c("raster", "grainchanger"))
 
 # aggregate to each resolution
 out <- parLapply(cl, rln, function(x) {
-  fname <- paste0("data/clc_shei_", x, "km.tif")
+  fname <- paste0("data/covariates/clc_shei_", x, "km.tif")
   raster::aggregate(clc, (x*1000)/100, 
             fun=function(y, ...) grainchanger::diversity(y, lc_class = 1:44), 
             filename = fname,
@@ -99,17 +103,210 @@ out <- parLapply(cl, rln, function(x) {
 stopCluster(cl)
 ```
 
+### Proportion of non-built land covers
+
+Initially used, my be dropped, this groups together all non-artificial land covers.
+
 ``` r
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("clc"))
-clusterEvalQ(cl, c("raster", "grainchanger"))
+clusterEvalQ(cl, c("raster"))
 
-# get the proportion of non-urban cover (10-44)
 out <- parLapply(cl, rln, function(x) {
-  fname <- paste0("data/clc_prop_", x, "km.tif")
+  fname <- paste0("data/covariates/clc_prop_", x, "km.tif")
   raster::aggregate(clc, (x*1000)/100, 
             fun=function(y, ...) sum(y %in% 10:44), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+### Proportion of amenity land cover
+
+-   green urban areas (10)
+-   sport and leisure facilities (11)
+
+``` r
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster"))
+
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/covariates/clc_amenity_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 10:11), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+### Proportion of agricultural land cover
+
+-   classes 12 to 21. This includes all land-cover types associated with agriculture regardless of intensity.
+
+``` r
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster"))
+```
+
+    ## [[1]]
+    ## [1] "raster"
+    ## 
+    ## [[2]]
+    ## [1] "raster"
+    ## 
+    ## [[3]]
+    ## [1] "raster"
+
+``` r
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/covariates/clc_agri_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 12:21), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+### Proportion of forested land cover
+
+-   agro-forestry areas (22)
+-   broad-leaved forest (23)
+-   coniferous forest (24)
+-   mixed forest (25)
+
+``` r
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster"))
+```
+
+    ## [[1]]
+    ## [1] "raster"
+    ## 
+    ## [[2]]
+    ## [1] "raster"
+    ## 
+    ## [[3]]
+    ## [1] "raster"
+
+``` r
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/covariates/clc_forest_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 22:25), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+### Proportion of other vegetated land covers
+
+-   natural grasslands (26)
+-   moors and heathland (27)
+-   sclerophyllous vegetation (28)
+-   transitional woodland-shrub (29)
+
+``` r
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster", "grainchanger"))
+```
+
+    ## [[1]]
+    ## [1] "raster"       "grainchanger"
+    ## 
+    ## [[2]]
+    ## [1] "raster"       "grainchanger"
+    ## 
+    ## [[3]]
+    ## [1] "raster"       "grainchanger"
+
+``` r
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/covariates/clc_veg_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 26:29), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+### Proportion of wetland land covers
+
+-   inland marshes (35)
+-   peat bogs (36)
+-   salt marshes (37)
+-   salines (38)
+-   intertidal flats (39)
+
+``` r
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster", "grainchanger"))
+```
+
+    ## [[1]]
+    ## [1] "raster"       "grainchanger"
+    ## 
+    ## [[2]]
+    ## [1] "raster"       "grainchanger"
+    ## 
+    ## [[3]]
+    ## [1] "raster"       "grainchanger"
+
+``` r
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/covariates/clc_wetland_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 35:39), 
+            filename = fname,
+            overwrite = TRUE)
+})
+
+stopCluster(cl)
+```
+
+### Proportion of water bodies
+
+-   water courses (40)
+-   water bodies (41)
+-   coastal lagoons (42)
+-   estuaries (43)
+-   sea and ocean (44)
+
+``` r
+cl <- makeCluster(no_cores)
+clusterExport(cl, c("clc"))
+clusterEvalQ(cl, c("raster", "grainchanger"))
+```
+
+    ## [[1]]
+    ## [1] "raster"       "grainchanger"
+    ## 
+    ## [[2]]
+    ## [1] "raster"       "grainchanger"
+    ## 
+    ## [[3]]
+    ## [1] "raster"       "grainchanger"
+
+``` r
+out <- parLapply(cl, rln, function(x) {
+  fname <- paste0("data/covariates/clc_water_", x, "km.tif")
+  raster::aggregate(clc, (x*1000)/100, 
+            fun=function(y, ...) sum(y %in% 40:44), 
             filename = fname,
             overwrite = TRUE)
 })
@@ -164,7 +361,7 @@ session[[1]]
     ##  language (EN)                        
     ##  collate  English_United Kingdom.1252 
     ##  tz       Europe/London               
-    ##  date     2018-08-21
+    ##  date     2018-09-05
 
 ``` r
 session[[2]] %>% kable
@@ -192,7 +389,7 @@ session[[2]] %>% kable
 | evaluate    |     | 0.10.1   | 2017-06-24 | CRAN (R 3.5.0)                     |
 | forcats     | \*  | 0.3.0    | 2018-02-19 | CRAN (R 3.5.0)                     |
 | foreach     | \*  | 1.4.4    | 2017-12-12 | CRAN (R 3.5.0)                     |
-| foreign     |     | 0.8-70   | 2017-11-28 | CRAN (R 3.5.0)                     |
+| foreign     |     | 0.8-71   | 2018-07-20 | CRAN (R 3.5.1)                     |
 | gdalUtils   | \*  | 2.0.1.14 | 2018-04-23 | CRAN (R 3.5.0)                     |
 | ggplot2     | \*  | 3.0.0    | 2018-07-03 | CRAN (R 3.5.1)                     |
 | glue        |     | 1.3.0    | 2018-07-17 | CRAN (R 3.5.1)                     |

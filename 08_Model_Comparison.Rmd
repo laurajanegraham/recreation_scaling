@@ -107,6 +107,10 @@ ggplot(mod_r2, aes(x = resolution, y = r.squared, group = 1)) +
 
 This is a really similar pattern to both the flickr and mene models. I think this tells us more about how $R^2$ improves as resolution coarsens than anything else...
 
+Fine resolution mene data picks out dog walkers, flickr data picks out "nice"/aesthetic etc. visits (perhaps holidays?)
+
+- Chloe working on interspersion - viewsheds/gravity models
+
 We can look at bright and dark spots here too. 
 
 ```{r, fig.width = 15, fig.height = 10}

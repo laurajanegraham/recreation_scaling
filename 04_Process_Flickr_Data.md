@@ -16,18 +16,18 @@ Flickr photo data
 
 There are a couple of options.
 
-1.  The approach used by InVEST \[@Wood2013g\], where all 'photo user days' are included. I worry that this will include a lot of non-recreational photos and bias the results towards cities, although their paper found good correlation between photo user days and income from recreation (but this included non-natural rec). NB I also had difficulties getting the InVEST software to download images over a large area.
+1.  The approach used by InVEST (Wood et al. 2013), where all 'photo user days' are included. I worry that this will include a lot of non-recreational photos and bias the results towards cities, although their paper found good correlation between photo user days and income from recreation (but this included non-natural rec). NB I also had difficulties getting the InVEST software to download images over a large area.
 
-2.  An approach where photos are filtered using keywords in a number of languages \[@VanZanten2014\]. The keywords are included in the supplementary materials for this paper. We can use the in development [flickr](https://github.com/FrancescaMancini/FlickrAPI_EABhackathon) package for R,
+2.  An approach where photos are filtered using keywords in a number of languages (Van Zanten et al. 2014). The keywords are included in the supplementary materials for this paper. We can use the in development [flickr](https://github.com/FrancescaMancini/FlickrAPI_EABhackathon) package for R,
 
 Start with option 2.
 
-I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword nature. Will build up on this using the tested keywords \[@VanZanten2014\].
+I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages. Will build up on this using the tested keywords (Van Zanten et al. 2014).
 
 ``` r
 photos <- photosSearch(year_range = c(2009, 2017),
-                        text = 'nature',
-                        woe_id = 24554868)
+                        text = 'natur*',
+                        woe_id = 24865675)
 ```
 
     ## 
@@ -259,12 +259,12 @@ We need to convert from points to raster at the 6 analysis resolutions. In order
 
 ``` r
 # loop through the dem files to get rasters for the visits
-fnames <- list.files("data", pattern = "dem_mean", full.names = TRUE)
+fnames <- list.files("data/covariates", pattern = "dem_mean", full.names = TRUE)
 
 for(f in fnames) {
   ras <- raster(f)
   rln <- res(ras)/1000
-  fname <- paste0("data/eng_flickr_", rln[1], "km.tif")
+  fname <- paste0("data/response/flickr_", rln[1], "km.tif")
   rec_ras <- rasterize(photos_sp, 
                        ras, 
                        'owner_date', 
@@ -289,7 +289,7 @@ session[[1]]
     ##  language (EN)                        
     ##  collate  English_United Kingdom.1252 
     ##  tz       Europe/London               
-    ##  date     2018-08-29
+    ##  date     2018-08-30
 
 ``` r
 session[[2]] %>% kable
@@ -382,3 +382,7 @@ session[[2]] %>% kable
 | XML        |     | 3.98-1.11 | 2018-04-16 | CRAN (R 3.5.0)                                             |
 | xml2       |     | 1.2.0     | 2018-01-24 | CRAN (R 3.5.0)                                             |
 | yaml       |     | 2.1.19    | 2018-05-01 | CRAN (R 3.5.0)                                             |
+
+Van Zanten, Boris T., Peter H. Verburg, Mark J. Koetse, and Pieter J H Van Beukering. 2014. “Preferences for European agrarian landscapes: A meta-analysis of case studies.” *Landscape and Urban Planning* 132. Elsevier B.V.: 89–101. doi:[10.1016/j.landurbplan.2014.08.012](https://doi.org/10.1016/j.landurbplan.2014.08.012).
+
+Wood, Spencer A., Anne D. Guerry, Jessica M. Silver, and Martin Lacayo. 2013. “Using social media to quantify nature-based tourism and recreation.” *Scientific Reports* 3. doi:[10.1038/srep02976](https://doi.org/10.1038/srep02976).

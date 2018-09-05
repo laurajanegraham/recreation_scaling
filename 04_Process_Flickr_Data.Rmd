@@ -31,13 +31,13 @@ There are a couple of options.
 
 Start with option 2. 
 
-I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword nature. Will build up on this using the tested keywords [@VanZanten2014]. 
+I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages. Will build up on this using the tested keywords [@VanZanten2014]. 
 
 
 ```{r get_photos}
 photos <- photosSearch(year_range = c(2009, 2017),
-                        text = 'nature',
-                        woe_id = 24554868)
+                        text = 'natur*',
+                        woe_id = 24865675)
                         
 photos_sf <- photos %>% 
   select(long = as.numeric.longitude.,
@@ -55,12 +55,12 @@ We need to convert from points to raster at the 6 analysis resolutions. In order
 
 ```{r photo_rasters}
 # loop through the dem files to get rasters for the visits
-fnames <- list.files("data", pattern = "dem_mean", full.names = TRUE)
+fnames <- list.files("data/covariates", pattern = "dem_mean", full.names = TRUE)
 
 for(f in fnames) {
   ras <- raster(f)
   rln <- res(ras)/1000
-  fname <- paste0("data/response/eng_flickr_", rln[1], "km.tif")
+  fname <- paste0("data/response/flickr_", rln[1], "km.tif")
   rec_ras <- rasterize(photos_sp, 
                        ras, 
                        'owner_date', 
