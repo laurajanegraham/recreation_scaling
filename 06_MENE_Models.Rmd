@@ -19,6 +19,8 @@ library(GGally)
 library(broom)
 library(MuMIn)
 library(knitr)
+library(hier.part)
+library(patchwork)
 
 # resolutions
 rlns <- c("1km", "5km", "10km", "25km", "50km", "100km")
@@ -29,6 +31,10 @@ study_ext_sf <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp", quiet
   st_transform(crs = 3035)
 
 study_ext <- as(study_ext_sf, "Spatial")
+
+theme_set(theme_bw(base_size = 10) + theme(strip.background = element_blank(), 
+                             panel.grid.major = element_blank(),
+                             panel.grid.minor = element_blank()))
 ```
 
 ## Data collating
@@ -38,14 +44,16 @@ We're making one big dataframe of the response (MENE visits) and  covariates (pr
 ```{r get_data}
 get_df <- function(rln) {
   # list all files of specified resolution
-    fnames <- list.files("data/covariates", pattern = paste0("_", rln), full.names = TRUE)
+  fnames <- list.files("data/covariates", pattern = paste0("_", rln), full.names = TRUE)
   fnames <- c(fnames, paste0("data/response/mene_", rln, ".tif"))
   
   # stack them
   dat <- stack(fnames)
   
-  # crop by study extent
+  # crop and mask by study extent - mask will get rid of most of the coastal cells
+  # NB need to find out what rule mask actually applies
   dat <- crop(dat, study_ext)
+  dat <- mask(dat, study_ext)
   
   # get into a dataframe
   df <- as.data.frame(dat, xy = TRUE) %>% 
@@ -101,31 +109,48 @@ Sparse coverage at 1km and 5km, but not too geographically biased. There are a l
 
 Finally, lets look at the relationships between variables:
 
-```{r var_relationships}
+```{r var_relationships, fig.width = 10}
 p <- list()
 for(r in rlns) {
-  p[[r]] <- ggpairs(df %>% filter(resolution == r) %>% select(-resolution, -x, -y), progress = FALSE)
+  p[[r]] <- ggpairs(df %>% filter(resolution == r) %>% dplyr::select(-resolution, -x, -y, -clc_prop), progress = FALSE)
 }
 
 p
 ```
 
-Seems that it's population and proportion of non-built land covers that are the strongest predictor at all resolutions, and that this effect increases with spatial resolution. LC diversity is next, with similar effect. Note that population density and proportion of non-built land covers are highly correlated at all resolutions except for 50km and 100km. 
+MENE most strongly correlated with:
+
+- 1km: agriculture (-ve) and population (+ve)
+- 5km: agriculture (-ve), population and amenity (+ve)
+- 10km: agriculture (-ve), LC diversity, population and amenity (+ve)
+- 25km: agriculture (-ve), LC diversity, population and amenity (+ve)
+- 50km: agriculture (-ve), LC diversity, vegetated LC, population and amenity (+ve)
+- 100km: agriculture and water (-ve), LC diversity, population and amenity (+ve)
+
+- amenity and population are correlated at all resolutions: amenity will not be included in the model. 
+
 
 ## Statistical Models
 
-We will fit negative binomial GLMs (due to overdispersion) with proportion of non-built land cover (clc_prop), mean elevation (dem_mean) and population (pop) and their first-order interactions as the full model. 
-
 ```{r mene_mods}
 fit_mod <- function(dat) {
-  glm(mene ~ clc_prop * dem_mean + clc_prop * pop + dem_mean * pop,
+  glm(mene ~ clc_agri + clc_forest + clc_shei + clc_veg + clc_water + clc_wetland + pop,
       family = "poisson",
       data = dat)
 }
 
+part_var <- function(dat) {
+  resp <- dat %>% pull(mene)
+  pred <- dat %>% dplyr::select(clc_agri, clc_forest, clc_shei, clc_water, clc_wetland, pop)
+  
+  part <- hier.part(resp, pred, family = "poisson", gof = "Rsqu", barplot = FALSE)$I.perc
+  
+  out <- tibble(var = rownames(part), expl = part$I)
+}
+
 scale_cols <- function(x) {
   scale_this <- function(y) as.vector(scale(y))
-  x <- x %>% mutate(pop = log(pop + 1))
+  #x <- x %>% mutate(pop = log(pop + 1))
   mutate_at(x, .vars = vars(-mene), .funs = funs(scale_this))
 }
 
@@ -143,13 +168,18 @@ get_mod_stats <- function(mod) {
     data.frame %>% 
     as_tibble(rownames = "variable") %>% 
     rename(lci = X2.5.., uci = X97.5..)
-
+  
   ca <- calc_commonality(mod)$CCTotalbyVar %>% 
     as_tibble(rownames = "variable")
   
   out <- inner_join(coeff, conf) %>% 
-    inner_join(ca)
-
+    inner_join(ca) %>% 
+    mutate(
+      r_s = map_dbl(variable, function(x) {
+        out <- cor(model.matrix(mod)[,x], mod$fitted.values)
+      }),
+      r_s2 = r_s^2)
+  
   return(out)
 }
 
@@ -160,19 +190,23 @@ mod <- df %>%
          mod = map(data_scaled, fit_mod),
          mod_glance = map(mod, glance),
          mod_stats = map(mod, get_mod_stats),
+         mod_part = map(data_scaled, part_var),
          mod_resid = map(mod, resid),
          mod_fitted = map(mod, fitted))
 
 mod_D2 <- mod %>%
-  select(resolution, mod_glance) %>% 
+  dplyr::select(resolution, mod_glance) %>% 
   unnest() %>% 
   mutate(D2 = (null.deviance - deviance)/null.deviance) %>% 
-  select(resolution, D2)
+  dplyr::select(resolution, D2)
 
-mod_stats <- mod %>% 
-  select(resolution, mod_stats) %>% 
-  unnest() %>% 
-  inner_join(mod_D2)
+mod_part <- mod %>% 
+  dplyr::select(resolution, mod_part) %>% 
+  unnest()
+
+mod_stats <- mod %>%
+  dplyr::select(resolution, mod_stats) %>% 
+  unnest()
 ```
 
 TODO: Testing residuals with DHARMa showed overdispersion with strong patterns in the residuals for CLC and POP. Would be worth fitting a quadratic term for each of these. Even with population logged, there are some low population cells (even at 100km level) with high residual values. 
@@ -192,23 +226,27 @@ What about the relative importances?
 NB This plot shows the proportion of variance explained by each variable of the total variance explained. It's greater than 1 because there are shared explained variances
 
 ```{r}
-ggplot(mod_stats, aes(x = resolution, y = Total/D2, fill = variable)) + 
-  scale_fill_viridis_d() + 
-  geom_bar(stat = "identity", position = "stack")
+p1 <- ggplot(mod_D2, aes(x = resolution, y = D2)) + 
+  geom_bar(stat = "identity") + 
+  labs(x = "", y = expression(D^{2})) + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+p2 <- ggplot(mod_part, aes(x = resolution, y = expl, fill = var)) + 
+  scale_fill_viridis_d(name = "Variable") + 
+  geom_bar(stat = "identity", position = "stack") + 
+  labs(x = "Resolution", y = "Variance explained %")
+
+p1 + p2 + 
+  plot_layout(ncol = 1, heights = c(1, 3)) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ")")
 ```
 
 - Importance of population increases slightly with spatial resolution. This explains the most variation in all cases
-- Importance of topography decreases with spatial resolution
-- Importance of non-built land covers decreases with spatial resolution (although increasing between 1km and 5km, but we may drop the 1km model)
-- First-order interactions are most important at intermediate resolutions (in particular the interaction between proportion of non-built land covers and population - some concerns around correlation between these, particularly at 25km resolution)
+- Importance of agriculture decreases with spatial resolution
+- wetland and habitat diversity become more important with increasing spatial resolution, but not to much of an extent. 
 
-This one is without standardising by the total variance explained. 
-
-```{r}
-ggplot(mod_stats, aes(x = resolution, y = Total, fill = variable)) + 
-  scale_fill_viridis_d() + 
-  geom_bar(stat = "identity", position = "stack")
-```
+- We can also view as categories - here yellow is demand, everything else is supply. Importance of demand increases with spatial resolution before decreasing at 100m resolution. 
 
 What about the relationships?
 
@@ -228,7 +266,7 @@ Following Frei et al. [-@Frei2018] and Cinner et al. [-@Cinner2016], we calculat
 
 ```{r, fig.width = 15, fig.height = 10}
 bd_spots <- mod %>% 
-  select(resolution, data, mod_fitted, mod_resid) %>% 
+  dplyr::select(resolution, data, mod_fitted, mod_resid) %>% 
   unnest() %>% 
   group_by(resolution) %>% 
   mutate(diff = mod_fitted - mene,
@@ -274,6 +312,8 @@ ggplot(bd_spots, aes(x = mod_fitted, y = mene)) +
   facet_wrap(~resolution, scales = "free")
 ```
 
+This pretty much shows that 1km is a poorly fitting model, need more bespoke approaches at this scale? 
+
 Scale dependency in the % of bright/dark spots?
 
 ```{r}
@@ -291,6 +331,8 @@ ggplot(bd_summary, aes(x = resolution, y = value, colour = key, group = key)) +
   stat_summary(fun.y=sum, geom="line") + 
   ylab("% of total area")
 ```
+
+I'm not sure that this plot is useful - I think this just tells us the same as the increasing $R^2$. 
 
 ## Hot & cold spots
 
