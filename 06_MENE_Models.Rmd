@@ -143,7 +143,7 @@ part_var <- function(dat) {
   resp <- dat %>% pull(mene)
   pred <- dat %>% dplyr::select(clc_agri, clc_forest, clc_shei, clc_water, clc_wetland, pop)
   
-  part <- hier.part(resp, pred, family = "poisson", gof = "Rsqu", barplot = FALSE)$I.perc
+  part <- hier.part(resp, pred, family = "poisson", gof = "logLik", barplot = FALSE)$I.perc
   
   out <- tibble(var = rownames(part), expl = part$I)
 }
