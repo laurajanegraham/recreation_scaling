@@ -26,11 +26,16 @@ library(patchwork)
 rlns <- c("1km", "5km", "10km", "25km", "50km", "100km")
 
 # study extent (for now this is England, will need extending to Europe)
-study_ext_sf <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp", quiet = TRUE) %>% 
+study_ext_eng_sf <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp", quiet = TRUE) %>% 
   filter(NAME_1 == "England") %>% 
   st_transform(crs = 3035)
 
-study_ext <- as(study_ext_sf, "Spatial")
+study_ext_europe_sf <- st_read("~/DATA/ADMINISTRATIVE/europe/Europe_coastline.shp", quiet = TRUE) %>% 
+  st_transform(crs = 3035)
+
+
+study_ext_eng <- as(study_ext_eng_sf, "Spatial")
+study_ext_europe <- as(study_ext_europe_sf, "Spatial")
 
 theme_set(theme_bw(base_size = 10) + theme(strip.background = element_blank(), 
                              panel.grid.major = element_blank(),
@@ -39,10 +44,10 @@ theme_set(theme_bw(base_size = 10) + theme(strip.background = element_blank(),
 
 ## Data collating
 
-We're making one big dataframe of the response (Flickr photo locations) and covariates (proportion of non-built land covers, land-cover diversity, mean elevation, topographic variation and population density) at each of the analysis resolutions. 
+We're making one big dataframe of the response (Flickr photo locations) and covariates at each of the analysis resolutions and extents. 
 
 ```{r get_data}
-get_df <- function(rln) {
+get_df <- function(rln, study_ext) {
   # list all files of specified resolution
   fnames <- list.files("data/covariates", pattern = paste0("_", rln), full.names = TRUE)
   fnames <- c(fnames, paste0("data/response/eng_flickr_", rln, ".tif"))
@@ -52,7 +57,7 @@ get_df <- function(rln) {
   
   # crop by study extent
   dat <- crop(dat, study_ext)
-  dat <- mask(dat, study_ext)
+  #dat <- mask(dat, study_ext)
   
   # get into a dataframe
   df <- as.data.frame(dat, xy = TRUE) %>% 
@@ -64,14 +69,30 @@ get_df <- function(rln) {
 }
 
 # dataframe with obs for all data
-df <- map_dfr(rlns, get_df) %>% 
+df_eng <- map_dfr(rlns, get_df, study_ext_eng) %>% 
   mutate(resolution = factor(resolution, 
                              levels = c("1km", 
                                         "5km", 
                                         "10km", 
                                         "25km", 
                                         "50km", 
-                                        "100km")))
+                                        "100km")),
+         extent = "England")
+
+df_europe <- map_dfr(rlns, get_df, study_ext_europe) %>% 
+  mutate(resolution = factor(resolution, 
+                             levels = c("1km", 
+                                        "5km", 
+                                        "10km", 
+                                        "25km", 
+                                        "50km", 
+                                        "100km")),
+         extent = "Europe")
+
+df <- bind_rows(df_eng, df_europe) %>% 
+  rename(flickr = eng_flickr)
+
+save(df, file = "flickr_df.Rda")
 ```
 
 ## Data exploration
@@ -79,14 +100,14 @@ df <- map_dfr(rlns, get_df) %>%
 First, let's just see whether there is sufficient variability and n in each resolution to fit models. 
 
 ```{r flickr_distribution}
-ggplot(df, aes(x = eng_flickr)) + 
+ggplot(df, aes(x = flickr)) + 
   geom_histogram() + 
-  facet_wrap(~resolution, scales = "free")
+  facet_grid(resolution~extent, scales = "free")
 ```
 
 ```{r flickr_n}
 df %>% 
-  group_by(resolution) %>% 
+  group_by(extent, resolution) %>% 
   summarise(count = n())
 ```
 
@@ -98,7 +119,7 @@ We can also inspect the spatial coverage of the Flickr data.
 ggplot(df, aes(x = x, y = y)) + 
   geom_raster() + 
   coord_equal() + 
-  facet_wrap(~resolution) + 
+  facet_grid(resolution~extent) + 
   theme(axis.title = element_blank(), 
         axis.text = element_blank(),
         axis.ticks = element_blank())
@@ -108,30 +129,41 @@ Good coverage at all but 1km. Even that is better than the MENE data though and 
 
 Finally, lets look at the relationships between variables:
 
-```{r var_relationships}
+```{r var_relationships_england}
 p <- list()
+
 for(r in rlns) {
-  p[[r]] <- ggpairs(df %>% filter(resolution == r) %>% select(-resolution, -x, -y), progress = FALSE)
+  p[[r]] <- ggpairs(df %>% filter(resolution == r, extent == "England") %>% select(-resolution, -x, -y), progress = FALSE)
 }
 
 p
 ```
 
+
 Seems that it's population and proportion of non-built land covers that are the strongest predictor at all resolutions, and that this effect increases with spatial resolution. LC diversity is next, with similar effect. Note that population density and proportion of non-built land covers are highly correlated at all resolutions except for 50km and 100km. 
 
+```{r var_relationships_europe}
+p <- list()
+
+for(r in rlns) {
+  p[[r]] <- ggpairs(df %>% filter(resolution == r, extent == "Europe") %>% select(-resolution, -x, -y), progress = FALSE)
+}
+
+p
+```
 ## Statistical Models
 
 We will fit negative binomial GLMs (due to overdispersion) with proportion of non-built land cover (clc_prop), mean elevation (dem_mean) and population (pop) and their first-order interactions as the full model. 
 
 ```{r flickr_mods}
 fit_mod <- function(dat) {
-  glm(eng_flickr ~ clc_agri + clc_forest + clc_shei + clc_veg + clc_water + clc_wetland + pop,
+  glm(flickr ~ clc_agri + clc_forest + clc_shei + clc_veg + clc_water + clc_wetland + pop,
       family = "poisson",
       data = dat)
 }
 
 part_var <- function(dat) {
-  resp <- dat %>% pull(eng_flickr)
+  resp <- dat %>% pull(flickr)
   pred <- dat %>% dplyr::select(clc_agri, clc_forest, clc_shei, clc_water, clc_wetland, pop)
   
   part <- hier.part(resp, pred, family = "poisson", gof = "logLik", barplot = FALSE)$I.perc
@@ -142,7 +174,7 @@ part_var <- function(dat) {
 scale_cols <- function(x) {
   scale_this <- function(y) as.vector(scale(y))
   #x <- x %>% mutate(pop = log(pop + 1))
-  mutate_at(x, .vars = vars(-eng_flickr), .funs = funs(scale_this))
+  mutate_at(x, .vars = vars(-flickr), .funs = funs(scale_this))
 }
 
 # get the CA function
@@ -175,7 +207,7 @@ get_mod_stats <- function(mod) {
 }
 
 mod <- df %>% 
-  group_by(resolution) %>% 
+  group_by(extent, resolution) %>% 
   nest() %>% 
   mutate(data_scaled = map(data, scale_cols),
          mod = map(data_scaled, fit_mod),
@@ -186,17 +218,17 @@ mod <- df %>%
          mod_fitted = map(mod, fitted))
 
 mod_D2 <- mod %>%
-  dplyr::select(resolution, mod_glance) %>% 
+  dplyr::select(extent, resolution, mod_glance) %>% 
   unnest() %>% 
   mutate(D2 = (null.deviance - deviance)/null.deviance) %>% 
-  dplyr::select(resolution, D2)
+  dplyr::select(extent, resolution, D2)
 
 mod_part <- mod %>% 
-  dplyr::select(resolution, mod_part) %>% 
+  dplyr::select(extent, resolution, mod_part) %>% 
   unnest()
 
 mod_stats <- mod %>%
-  dplyr::select(resolution, mod_stats) %>% 
+  dplyr::select(extent, resolution, mod_stats) %>% 
   unnest()
 ```
 
@@ -206,7 +238,8 @@ How well do they fit? NB We are using $D^2$, which is equivalent to $R^2$ [@Guis
 
 ```{r}
 ggplot(mod_D2, aes(x = resolution, y = D2, group = 1)) + 
-  geom_point() + 
+  geom_point() +
+  facet_wrap(~extent) + 
   stat_summary(fun.y=sum, geom="line")
 ```
 
@@ -217,18 +250,20 @@ What about the relative importances?
 NB This plot shows the proportion of variance explained by each variable of the total variance explained. It's greater than 1 because there are shared explained variances
 
 ```{r}
-p1 <- ggplot(mod_D2, aes(x = resolution, y = D2)) + 
+d2 <- ggplot(mod_D2, aes(x = resolution, y = D2)) + 
   geom_bar(stat = "identity") + 
+  facet_wrap(~extent) + 
   labs(x = "", y = expression(D^{2})) + 
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank())
 
-p2 <- ggplot(mod_part, aes(x = resolution, y = expl, fill = var)) + 
+varpart <- ggplot(mod_part, aes(x = resolution, y = expl, fill = var)) + 
   scale_fill_viridis_d(name = "Variable") + 
   geom_bar(stat = "identity", position = "stack") + 
+  facet_wrap(~extent) + 
   labs(x = "Resolution", y = "Variance explained %")
 
-p1 + p2 + 
+d2 + varpart + 
   plot_layout(ncol = 1, heights = c(1, 3)) + 
   plot_annotation(tag_levels = "a", tag_suffix = ")")
 ```
@@ -248,7 +283,7 @@ ggplot(mod_stats, aes(x = resolution, y = coef)) +
   geom_point() + 
   geom_hline(yintercept = 0) + 
   geom_errorbar(aes(ymin = lci, ymax = uci)) + 
-  facet_wrap(~variable, nrow = 1)
+  facet_grid(extent~variable)
 ```
 
 - Agriculture always negative
@@ -264,12 +299,12 @@ Following Frei et al. [-@Frei2018] and Cinner et al. [-@Cinner2016], we calculat
 
 ```{r, fig.width = 15, fig.height = 10}
 bd_spots <- mod %>% 
-  select(resolution, data, mod_fitted, mod_resid) %>% 
+  select(extent, resolution, data, mod_fitted, mod_resid) %>% 
   unnest() %>% 
   group_by(resolution) %>% 
-  mutate(diff = mod_fitted - eng_flickr,
-         bd_spots = case_when(diff < -sd(eng_flickr) ~ "Dark",
-                               diff > sd(eng_flickr) ~ "Bright",
+  mutate(diff = mod_fitted - flickr,
+         bd_spots = case_when(diff < -sd(flickr) ~ "Dark",
+                               diff > sd(flickr) ~ "Bright",
                                TRUE ~ "Neutral"))
 
 # potentially explanatory spatial layers
@@ -281,19 +316,32 @@ bd_spots <- mod %>%
 #                 quiet = TRUE) %>%
 #   st_transform(st_crs(study_ext_sf))
 
-cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
-                  quiet = TRUE) %>%
-  st_transform(st_crs(study_ext_sf)) %>%
-  st_centroid %>%
-  filter(tcity15nm %in% c("Birmingham", "Leeds", "London", "Manchester", "Newcastle upon Tyne"))
-
+# cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
+#                   quiet = TRUE) %>%
+#   st_transform(st_crs(study_ext_sf)) %>%
+#   st_centroid %>%
+#   filter(tcity15nm %in% c("Birmingham", "Leeds", "London", "Manchester", "Newcastle upon Tyne"))
+# 
 ggplot() + 
-  geom_raster(data = bd_spots, 
+  geom_raster(data = bd_spots %>% filter(extent == "Europe"), 
               aes(x = x, y = y, fill = bd_spots)) + 
   #geom_sf(data = np, colour = "black", fill = NA) + 
   #geom_sf(data = aonb, colour = "black", fill = NA) + 
-  geom_sf(data = cities, colour = "black", fill = NA) + 
-  geom_sf(data = study_ext_sf, fill = NA) + 
+  #geom_sf(data = cities, colour = "black", fill = NA) + 
+  geom_sf(data = study_ext_europe_sf, fill = NA) + 
+  facet_wrap(~resolution) + 
+  scale_fill_manual(values = c("orange", "blue", "grey")) + 
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+ggplot() + 
+  geom_raster(data = bd_spots %>% filter(extent == "England"), 
+              aes(x = x, y = y, fill = bd_spots)) + 
+  #geom_sf(data = np, colour = "black", fill = NA) + 
+  #geom_sf(data = aonb, colour = "black", fill = NA) + 
+  #geom_sf(data = cities, colour = "black", fill = NA) + 
+  geom_sf(data = study_ext_eng_sf, fill = NA) + 
   facet_wrap(~resolution) + 
   scale_fill_manual(values = c("orange", "blue", "grey")) + 
   theme(axis.title = element_blank(), 
@@ -303,7 +351,7 @@ ggplot() +
 
 Cities marked out: London, Birmingham, Manchester, Leeds, Newcastle upon Tyne.  
 ```{r}
-ggplot(bd_spots, aes(x = mod_fitted, y = eng_flickr)) + 
+ggplot(bd_spots, aes(x = mod_fitted, y = flickr)) + 
   geom_point(aes(colour = bd_spots)) + 
   scale_colour_manual(values = c("orange", "blue", "grey")) + 
   geom_smooth(method = "lm") + 
@@ -326,55 +374,6 @@ bd_summary <- group_by(bd_spots, resolution) %>%
 ggplot(bd_summary, aes(x = resolution, y = value, colour = key, group = key)) + 
   geom_point() + 
   scale_colour_manual(values = c("orange", "blue", "grey")) + 
-  stat_summary(fun.y=sum, geom="line") + 
-  ylab("% of total area")
-```
-
-## Hot & cold spots
-
-These are the areas of maximum and minimum service provision. I'm defining hot/cold spots as those cells in the top/bottom 5%. 
-
-I'm not 100% convinced by this because of the skewed distribution. 
-
-```{r}
-hc_spots <- df %>% 
-  group_by(resolution) %>% 
-  mutate(hc_spots = case_when(eng_flickr < quantile(eng_flickr, 0.1) ~ "Cold",
-                               eng_flickr > quantile(eng_flickr, 0.9) ~ "Hot",
-                               TRUE ~ "Neutral"))
-```
-
-```{r}
-ggplot() + 
-  geom_raster(data = hc_spots, 
-              aes(x = x, y = y, fill = hc_spots)) + 
-  #geom_sf(data = np, colour = "black", fill = NA) + 
-  #geom_sf(data = aonb, colour = "black", fill = NA) + 
-  geom_sf(data = cities, colour = "black", fill = NA) + 
-  geom_sf(data = study_ext_sf, fill = NA) + 
-  facet_wrap(~resolution) + 
-  scale_fill_manual(values = c("blue", "orange", "grey")) + 
-  theme(axis.title = element_blank(), 
-        axis.text = element_blank(),
-        axis.ticks = element_blank())
-```
-
-Problem in that coastal areas come out as cold spots, but that's an area thing. Might need to remove cells which are not 100% on land. 
-
-Scale dependency in the % of hot/cold spots?
-
-```{r}
-hc_summary <- group_by(hc_spots, resolution) %>% 
-  summarise(Hot = sum(hc_spots == "Hot"),
-            Cold = sum(hc_spots == "Cold"),
-            Total = n(),
-            `Hot %` = (Hot/Total)*100,
-            `Cold %` = (Cold/Total)*100) %>% 
-  gather(key, value, -resolution, -Hot, -Cold, -Total)
-
-ggplot(hc_summary, aes(x = resolution, y = value, colour = key, group = key)) + 
-  geom_point() + 
-  scale_colour_manual(values = c("blue", "orange", "grey")) + 
   stat_summary(fun.y=sum, geom="line") + 
   ylab("% of total area")
 ```
