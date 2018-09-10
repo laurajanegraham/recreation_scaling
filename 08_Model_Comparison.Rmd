@@ -91,7 +91,7 @@ mod <- df %>%
   nest() %>% 
   mutate(mod = map(data, fit_mod),
          mod_glance = map(mod, glance),
-         mod_fitted = map(mod, fitted))
+         mod_resids = map(mod, function(x) x$residuals))
 
 mod_r2 <- mod %>%
   select(resolution, mod_glance) %>% 
@@ -111,48 +111,26 @@ Fine resolution mene data picks out dog walkers, flickr data picks out "nice"/ae
 
 - Chloe working on interspersion - viewsheds/gravity models
 
-We can look at bright and dark spots here too. 
+We can use the residuals to look at where the data sources differ.  
 
 ```{r, fig.width = 15, fig.height = 10}
-bd_spots <- mod %>% 
-  select(resolution, data, mod_fitted) %>% 
-  unnest() %>% 
-  group_by(resolution) %>% 
-  mutate(diff = mod_fitted - mene,
-         bd_spots = case_when(diff < -sd(mene) ~ "Dark",
-                               diff > sd(mene) ~ "Bright",
-                               TRUE ~ "Neutral"))
-
-# potentially explanatory spatial layers
-# np <- st_read("~/DATA/ADMINISTRATIVE/national_parks_england/National_Parks_England.shp",
-#               quiet = TRUE) %>%
-#   st_transform(st_crs(study_ext_sf))
-# 
-# aonb <- st_read("~/DATA/ADMINISTRATIVE/aonb_england/Areas_of_Outstanding_Natural_Beauty_England.shp",
-#                 quiet = TRUE) %>%
-#   st_transform(st_crs(study_ext_sf))
-
-cities <- st_read("~/DATA/ADMINISTRATIVE/uk_cities/Major_Towns_and_Cities_December_2015_Boundaries.shp",
-                  quiet = TRUE) %>%
-  st_transform(st_crs(study_ext_sf)) %>%
-  st_centroid %>%
-  filter(tcity15nm %in% c("Birmingham", "Leeds", "London", "Manchester", "Newcastle upon Tyne"))
+resids <- mod %>% 
+  select(resolution, data, mod_resids) %>% 
+  unnest()
 
 ggplot() + 
-  geom_raster(data = bd_spots, 
-              aes(x = x, y = y, fill = bd_spots)) + 
-  #geom_sf(data = np, colour = "black", fill = NA) + 
-  #geom_sf(data = aonb, colour = "black", fill = NA) + 
-  geom_sf(data = cities, colour = "black", fill = NA) + 
+  geom_raster(data = mod_resids, 
+              aes(x = x, y = y, fill = diff)) + 
   geom_sf(data = study_ext_sf, fill = NA) + 
   facet_wrap(~resolution) + 
-  scale_fill_manual(values = c("orange", "blue", "grey")) + 
+  scale_fill_gradient2("Residuals") + 
   theme(axis.title = element_blank(), 
         axis.text = element_blank(),
         axis.ticks = element_blank())
 ```
 
-Bright spots show us areas which are over-represented by MENE records, dark spots show us areas that are over-represented by Flickr records. More areas over-represented by Flickr at all resolutions. 
+Negative residuals show us areas which are over-represented by MENE records, negative residuals show us areas that are over-represented by Flickr records. More areas over-represented by Flickr at all resolutions. 
+
 ## References
 
 ## Session Info

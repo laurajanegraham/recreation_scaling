@@ -49,6 +49,14 @@ photos_sf <- photos %>%
   st_transform(crs = 3035)
 
 photos_sp <- as(photos_sf, "Spatial")
+
+
+
+# testing
+photos <- photosSearch(year_range = c(2016, 2017),
+                        text = 'natur*',
+                        woe_id = 24865675)
+	
 ```
 
 We need to convert from points to raster at the 6 analysis resolutions. In order to do so, we want the unique owner date combinations. 
