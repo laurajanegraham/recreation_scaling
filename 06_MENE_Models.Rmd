@@ -392,6 +392,8 @@ p1 + p2 +
   plot_annotation(tag_levels = "a", tag_suffix = ")")
 ```
 
+(note to self: these colours look hateful, but we can tell them apart and I've checked with a colourblindness simulator)
+
 - Importance of population increases with spatial resolution until 100km, where it decreases again. This explains the most variation in all cases except at 1km resolution. Suggests that people are travelling further than 1km on average?
 - Importance of agriculture decreases with spatial resolution (slight increase at 100km)
 - Mean elevation is most important at 1km resolution, reasonably stable thereafter
@@ -419,6 +421,8 @@ mod_preds <- mod %>%
   
 mod_preds$plots[[1]] + mod_preds$plots[[2]] + mod_preds$plots[[3]] + mod_preds$plots[[4]] + mod_preds$plots[[5]] + mod_preds$plots[[6]] + plot_layout(ncol = 1)
 ```
+
+NB BELOW TEXT NEEDS UPDATING TO REFER TO THESE NEW PLOTS. 
 
 **I'm trying to work out what to do about these. If I exclude correlated variable I end up with none of my models meeting assumptions. The multicollinearity doesn't affect the variance partitioning due to the way in which this has been done; however, it does affect the ability to estimate parameters. Thing is, I'm not actually sure I 100% care about that**
 
