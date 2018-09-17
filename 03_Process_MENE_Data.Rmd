@@ -38,10 +38,11 @@ We need to convert from points to raster at the 6 analysis resolutions.
 
 ```{r rec_rasters}
 # loop through the dem files to get rasters for the visits
-fnames <- list.files("data", pattern = "dem_mean", full.names = TRUE)
+fnames <- list.files("data/covariates", pattern = "dem_mean", full.names = TRUE)
 
 for(f in fnames) {
   ras <- raster(f)
+  ras <- crop(ras, bbox(visits_sp))
   rln <- res(ras)/1000
   fname <- paste0("data/mene_", rln[1], "km.tif")
   rec_ras <- rasterize(visits_sp, 

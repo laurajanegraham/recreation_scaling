@@ -38,9 +38,16 @@ I'm going to start with just England for the years 2009-2017 to be comparable to
 study_ext <- st_read("~/DATA/ADMINISTRATIVE/europe/Europe_coastline.shp") %>% 
   st_transform(crs = 4326)
 
-study_grid <- st_make_grid(study_ext, cellsize = 5)
+grid_include <- st_make_grid(study_ext, cellsize = 5) %>% 
+  st_intersects(study_ext) %>% 
+  map_dbl(function(x) ifelse(is_empty(x), 0, x))
 
-photos <- map_dfr(study_grid[1:5], function(x) {
+study_grid <- st_make_grid(study_ext, cellsize = 5) %>% 
+  st_sf %>% 
+  mutate(grid_include = grid_include) %>% 
+  filter(grid_include == 1)
+
+photos <- map_dfr(study_grid[1:5,], function(x) {
   photosSearch(year_range = c(2009, 2017),
                text = 'natur*',
                bbox = st_bbox(x)
