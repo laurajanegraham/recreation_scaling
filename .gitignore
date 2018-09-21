@@ -39,3 +39,4 @@ rsconnect/
 
 # Data files
 data/
+flickr_api_key.Rda
