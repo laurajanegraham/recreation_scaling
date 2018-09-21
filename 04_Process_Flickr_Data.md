@@ -22,14 +22,250 @@ There are a couple of options.
 
 Start with option 2.
 
-I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages. Will build up on this using the tested keywords (Van Zanten et al. 2014).
+I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages \[this doesn't work - trying for just `nature` and will see how that goes\]. Will build up on this using the tested keywords (Van Zanten et al. 2014).
 
 ``` r
-photos <- photosSearch(year_range = c(2009, 2017),
-                        text = 'natur*',
-                        woe_id = 24865675)
+study_ext <- st_read("~/DATA/ADMINISTRATIVE/europe/Europe_coastline.shp") %>% 
+  st_transform(crs = 4326)
 ```
 
+    ## Reading layer `Europe_coastline' from data source `C:\Users\lg1u16\DATA\ADMINISTRATIVE\europe\Europe_coastline.shp' using driver `ESRI Shapefile'
+    ## Simple feature collection with 1 feature and 1 field
+    ## geometry type:  MULTILINESTRING
+    ## dimension:      XY
+    ## bbox:           xmin: 943609.8 ymin: 267126.3 xmax: 7136352 ymax: 6825119
+    ## epsg (SRID):    NA
+    ## proj4string:    +proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs
+
+``` r
+grid_include <- st_make_grid(study_ext, cellsize = 5) %>% 
+  st_intersects(study_ext) %>% 
+  map_dbl(function(x) ifelse(is_empty(x), 0, x))
+
+study_grid <- st_make_grid(study_ext, cellsize = 5) %>% 
+  st_sf %>% 
+  mutate(grid_include = grid_include) %>% 
+  filter(grid_include == 1)
+
+photos <- map_dfr(study_grid, function(x) {
+  photosSearch(year_range = c(2009, 2017),
+               text = 'nature',
+               bbox = st_bbox(x)
+  )
+})
+```
+
+    ## 
+      |                                                                       
+      |                                                                 |   0%
+      |                                                                       
+      |=                                                                |   1%
+      |                                                                       
+      |=                                                                |   2%
+      |                                                                       
+      |==                                                               |   3%
+      |                                                                       
+      |==                                                               |   4%
+      |                                                                       
+      |===                                                              |   5%
+      |                                                                       
+      |====                                                             |   6%
+      |                                                                       
+      |=====                                                            |   7%
+      |                                                                       
+      |=====                                                            |   8%
+      |                                                                       
+      |======                                                           |   9%
+      |                                                                       
+      |=======                                                          |  10%
+      |                                                                       
+      |=======                                                          |  11%
+      |                                                                       
+      |========                                                         |  12%
+      |                                                                       
+      |========                                                         |  13%
+      |                                                                       
+      |=========                                                        |  14%
+      |                                                                       
+      |==========                                                       |  15%
+      |                                                                       
+      |==========                                                       |  16%
+      |                                                                       
+      |===========                                                      |  17%
+      |                                                                       
+      |===========                                                      |  18%
+      |                                                                       
+      |============                                                     |  19%
+      |                                                                       
+      |=============                                                    |  19%
+      |                                                                       
+      |=============                                                    |  20%
+      |                                                                       
+      |==============                                                   |  21%
+      |                                                                       
+      |==============                                                   |  22%
+      |                                                                       
+      |===============                                                  |  23%
+      |                                                                       
+      |================                                                 |  24%
+      |                                                                       
+      |================                                                 |  25%
+      |                                                                       
+      |=================                                                |  26%
+      |                                                                       
+      |=================                                                |  27%
+      |                                                                       
+      |==================                                               |  28%
+      |                                                                       
+      |===================                                              |  29%
+      |                                                                       
+      |===================                                              |  30%
+      |                                                                       
+      |====================                                             |  31%
+      |                                                                       
+      |=====================                                            |  32%
+      |                                                                       
+      |======================                                           |  33%
+      |                                                                       
+      |======================                                           |  34%
+      |                                                                       
+      |=======================                                          |  35%
+      |                                                                       
+      |=======================                                          |  36%
+      |                                                                       
+      |========================                                         |  37%
+      |                                                                       
+      |=========================                                        |  38%
+      |                                                                       
+      |=========================                                        |  39%
+      |                                                                       
+      |==========================                                       |  40%
+      |                                                                       
+      |==========================                                       |  41%
+      |                                                                       
+      |===========================                                      |  42%
+      |                                                                       
+      |============================                                     |  43%
+      |                                                                       
+      |============================                                     |  44%
+      |                                                                       
+      |=============================                                    |  44%
+      |                                                                       
+      |=============================                                    |  45%
+      |                                                                       
+      |==============================                                   |  46%
+      |                                                                       
+      |===============================                                  |  47%
+      |                                                                       
+      |===============================                                  |  48%
+      |                                                                       
+      |================================                                 |  49%
+      |                                                                       
+      |================================                                 |  50%
+      |                                                                       
+      |=================================                                |  51%
+      |                                                                       
+      |==================================                               |  52%
+      |                                                                       
+      |==================================                               |  53%
+      |                                                                       
+      |===================================                              |  54%
+      |                                                                       
+      |====================================                             |  55%
+      |                                                                       
+      |====================================                             |  56%
+      |                                                                       
+      |=====================================                            |  56%
+      |                                                                       
+      |=====================================                            |  57%
+      |                                                                       
+      |======================================                           |  58%
+      |                                                                       
+      |=======================================                          |  59%
+      |                                                                       
+      |=======================================                          |  60%
+      |                                                                       
+      |========================================                         |  61%
+      |                                                                       
+      |========================================                         |  62%
+      |                                                                       
+      |=========================================                        |  63%
+      |                                                                       
+      |==========================================                       |  64%
+      |                                                                       
+      |==========================================                       |  65%
+      |                                                                       
+      |===========================================                      |  66%
+      |                                                                       
+      |===========================================                      |  67%
+      |                                                                       
+      |============================================                     |  68%
+      |                                                                       
+      |=============================================                    |  69%
+      |                                                                       
+      |==============================================                   |  70%
+      |                                                                       
+      |==============================================                   |  71%
+      |                                                                       
+      |===============================================                  |  72%
+      |                                                                       
+      |================================================                 |  73%
+      |                                                                       
+      |================================================                 |  74%
+      |                                                                       
+      |=================================================                |  75%
+      |                                                                       
+      |=================================================                |  76%
+      |                                                                       
+      |==================================================               |  77%
+      |                                                                       
+      |===================================================              |  78%
+      |                                                                       
+      |===================================================              |  79%
+      |                                                                       
+      |====================================================             |  80%
+      |                                                                       
+      |====================================================             |  81%
+      |                                                                       
+      |=====================================================            |  81%
+      |                                                                       
+      |======================================================           |  82%
+      |                                                                       
+      |======================================================           |  83%
+      |                                                                       
+      |=======================================================          |  84%
+      |                                                                       
+      |=======================================================          |  85%
+      |                                                                       
+      |========================================================         |  86%
+      |                                                                       
+      |=========================================================        |  87%
+      |                                                                       
+      |=========================================================        |  88%
+      |                                                                       
+      |==========================================================       |  89%
+      |                                                                       
+      |==========================================================       |  90%
+      |                                                                       
+      |===========================================================      |  91%
+      |                                                                       
+      |============================================================     |  92%
+      |                                                                       
+      |============================================================     |  93%
+      |                                                                       
+      |=============================================================    |  94%
+      |                                                                       
+      |==============================================================   |  95%
+      |                                                                       
+      |===============================================================  |  96%
+      |                                                                       
+      |===============================================================  |  97%
+      |                                                                       
+      |================================================================ |  98%
+      |                                                                       
+      |================================================================ |  99%
+      |                                                                       
+      |=================================================================| 100%
     ## 
       |                                                                       
       |                                                                 |   0%
@@ -255,7 +491,7 @@ photos_sf <- photos %>%
 photos_sp <- as(photos_sf, "Spatial")
 ```
 
-We need to convert from points to raster at the 6 analysis resolutions. In order to do so, we want the unique owner date combinations.
+We need to convert from points to raster at the analysis resolutions. In order to do so, we want the unique owner date combinations.
 
 ``` r
 # loop through the dem files to get rasters for the visits
@@ -274,6 +510,49 @@ for(f in fnames) {
 }
 ```
 
+These are lists of keywords from (Van Zanten et al. 2014). They filtered photos that contained at least one of both kw\_landscape and kw\_ambig, and all keywords from kw\_unambig. Best way to do this would be to get all photos from one set (e.g. kw\_landscape), and then use `stringr` to filter the tags to ensure at least one of kw\_ambig is contained in the tags).
+
+``` r
+kw_landscape <- c("nature", "landscape", "cultural
+landscape", "cultural land", "hill",
+"mountain", "valley", "basin", "highland",
+"ridge", "cliff", "peak", "gorge",
+"glacier", "beach", "shore", "coast",
+"sea", "ocean", "wetland", "river", "dike",
+"brook", "lake", "waterfall", "dune",
+"swamp", "pond", "ditch", "channel",
+"estuary", "creek", "forest", "tree",
+"woods", "canopy", "grove", "hedgerow",
+"bush", "meadow", "grassland", "pasture",
+"countryside", "prairie", "maize",
+"corn", "wheat", "oats", "livestock", "cattle",
+"cow"," sheep", "orchard", "field",
+"vineyard", "crops", "cropland", "grazing",
+"heather", "heath", "heathland",
+"park", "peat", "peatland", "peatbog",
+"marsh", "marshes", "marshland",
+"moor", "moors", "moorland", "shrubs",
+"shrubland")
+
+kw_ambig <- c("relax", "cruising", "relaxing", "beauty",
+"beautiful", "magnificence", "magnificent",
+"splendour", "brilliance", "brilliant",
+"inspiring", "inspired", "sublime",
+"gorgeous", "outstanding", "enjoying",
+"breathtaking", "enchanting")
+
+kw_unambig <- c("walk", "walking", "hike", "hiking",
+"camp", "camping", "recreation", "cycling",
+"horse riding", "fishing", "mountain
+biking", "bike riding", "run, running",
+"hunt", "hunting", "tourism",
+"climbing", "trekking", "mountaineering",
+"skiing", "sailing", "rowing", "jogging",
+"outdoor", "vista", "panorama",
+"scene", "scenic", "scenery", "view",
+"viewpoint", "heritage", "historic value")
+```
+
 Session Info
 ------------
 
@@ -289,99 +568,99 @@ session[[1]]
     ##  language (EN)                        
     ##  collate  English_United Kingdom.1252 
     ##  tz       Europe/London               
-    ##  date     2018-08-30
+    ##  date     2018-09-18
 
 ``` r
 session[[2]] %>% kable
 ```
 
-| package    | \*  | version   | date       | source                                                     |
-|:-----------|:----|:----------|:-----------|:-----------------------------------------------------------|
-| assertthat |     | 0.2.0     | 2017-04-11 | CRAN (R 3.5.0)                                             |
-| backports  |     | 1.1.2     | 2017-12-13 | CRAN (R 3.5.0)                                             |
-| base       | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| bindr      |     | 0.1.1     | 2018-03-13 | CRAN (R 3.5.0)                                             |
-| bindrcpp   | \*  | 0.2.2     | 2018-03-29 | CRAN (R 3.5.0)                                             |
-| bitops     |     | 1.0-6     | 2013-08-17 | CRAN (R 3.5.0)                                             |
-| broom      |     | 0.4.4     | 2018-03-29 | CRAN (R 3.5.0)                                             |
-| cellranger |     | 1.1.0     | 2016-07-27 | CRAN (R 3.5.0)                                             |
-| class      |     | 7.3-14    | 2015-08-30 | CRAN (R 3.5.0)                                             |
-| classInt   |     | 0.2-3     | 2018-04-16 | CRAN (R 3.5.0)                                             |
-| cli        |     | 1.0.0     | 2017-11-05 | CRAN (R 3.5.0)                                             |
-| colorspace |     | 1.3-2     | 2016-12-14 | CRAN (R 3.5.0)                                             |
-| compiler   |     | 3.5.0     | 2018-04-23 | local                                                      |
-| crayon     |     | 1.3.4     | 2017-09-16 | CRAN (R 3.5.0)                                             |
-| curl       |     | 3.2       | 2018-03-28 | CRAN (R 3.5.0)                                             |
-| datasets   | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| DBI        |     | 1.0.0     | 2018-05-02 | CRAN (R 3.5.0)                                             |
-| devtools   |     | 1.13.5    | 2018-02-18 | CRAN (R 3.5.0)                                             |
-| digest     |     | 0.6.15    | 2018-01-28 | CRAN (R 3.5.0)                                             |
-| dplyr      | \*  | 0.7.6     | 2018-06-29 | CRAN (R 3.5.1)                                             |
-| e1071      |     | 1.6-8     | 2017-02-02 | CRAN (R 3.5.0)                                             |
-| evaluate   |     | 0.10.1    | 2017-06-24 | CRAN (R 3.5.0)                                             |
-| flickr     | \*  | 1.0       | 2018-08-29 | Github (<FrancescaMancini/FlickrAPI_EABhackathon@d09f35f>) |
-| forcats    | \*  | 0.3.0     | 2018-02-19 | CRAN (R 3.5.0)                                             |
-| foreign    |     | 0.8-71    | 2018-07-20 | CRAN (R 3.5.1)                                             |
-| ggplot2    | \*  | 3.0.0     | 2018-07-03 | CRAN (R 3.5.1)                                             |
-| glue       |     | 1.3.0     | 2018-07-17 | CRAN (R 3.5.1)                                             |
-| graphics   | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| grDevices  | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| grid       |     | 3.5.0     | 2018-04-23 | local                                                      |
-| gtable     |     | 0.2.0     | 2016-02-26 | CRAN (R 3.5.0)                                             |
-| haven      |     | 1.1.1     | 2018-01-18 | CRAN (R 3.5.0)                                             |
-| hms        |     | 0.4.2     | 2018-03-10 | CRAN (R 3.5.0)                                             |
-| htmltools  |     | 0.3.6     | 2017-04-28 | CRAN (R 3.5.0)                                             |
-| httr       |     | 1.3.1     | 2017-08-20 | CRAN (R 3.5.0)                                             |
-| jsonlite   |     | 1.5       | 2017-06-01 | CRAN (R 3.5.0)                                             |
-| knitr      | \*  | 1.20      | 2018-02-20 | CRAN (R 3.5.0)                                             |
-| lattice    |     | 0.20-35   | 2017-03-25 | CRAN (R 3.5.0)                                             |
-| lazyeval   |     | 0.2.1     | 2017-10-29 | CRAN (R 3.5.0)                                             |
-| lubridate  | \*  | 1.7.4     | 2018-04-11 | CRAN (R 3.5.0)                                             |
-| magrittr   |     | 1.5       | 2014-11-22 | CRAN (R 3.5.0)                                             |
-| memoise    |     | 1.1.0     | 2017-04-21 | CRAN (R 3.5.0)                                             |
-| methods    | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| mnormt     |     | 1.5-5     | 2016-10-15 | CRAN (R 3.5.0)                                             |
-| modelr     |     | 0.1.2     | 2018-05-11 | CRAN (R 3.5.0)                                             |
-| munsell    |     | 0.4.3     | 2016-02-13 | CRAN (R 3.5.0)                                             |
-| nlme       |     | 3.1-137   | 2018-04-07 | CRAN (R 3.5.0)                                             |
-| parallel   |     | 3.5.0     | 2018-04-23 | local                                                      |
-| pillar     |     | 1.2.2     | 2018-04-26 | CRAN (R 3.5.0)                                             |
-| pkgconfig  |     | 2.0.1     | 2017-03-21 | CRAN (R 3.5.0)                                             |
-| plyr       |     | 1.8.4     | 2016-06-08 | CRAN (R 3.5.0)                                             |
-| psych      |     | 1.8.4     | 2018-05-06 | CRAN (R 3.5.0)                                             |
-| purrr      | \*  | 0.2.5     | 2018-05-29 | CRAN (R 3.5.1)                                             |
-| R6         |     | 2.2.2     | 2017-06-17 | CRAN (R 3.5.0)                                             |
-| raster     | \*  | 2.6-7     | 2017-11-13 | CRAN (R 3.5.1)                                             |
-| Rcpp       |     | 0.12.18   | 2018-07-23 | CRAN (R 3.5.1)                                             |
-| RCurl      |     | 1.95-4.11 | 2018-07-15 | CRAN (R 3.5.1)                                             |
-| readr      | \*  | 1.1.1     | 2017-05-16 | CRAN (R 3.5.0)                                             |
-| readxl     |     | 1.1.0     | 2018-04-20 | CRAN (R 3.5.0)                                             |
-| reshape2   |     | 1.4.3     | 2017-12-11 | CRAN (R 3.5.0)                                             |
-| rgdal      |     | 1.3-4     | 2018-08-03 | CRAN (R 3.5.1)                                             |
-| rlang      |     | 0.2.1     | 2018-05-30 | CRAN (R 3.5.1)                                             |
-| rmarkdown  |     | 1.10      | 2018-06-11 | CRAN (R 3.5.0)                                             |
-| rprojroot  |     | 1.3-2     | 2018-01-03 | CRAN (R 3.5.0)                                             |
-| rstudioapi |     | 0.7       | 2017-09-07 | CRAN (R 3.5.0)                                             |
-| rvest      |     | 0.3.2     | 2016-06-17 | CRAN (R 3.5.0)                                             |
-| scales     |     | 0.5.0     | 2017-08-24 | CRAN (R 3.5.0)                                             |
-| sf         | \*  | 0.6-3     | 2018-05-17 | CRAN (R 3.5.1)                                             |
-| sp         | \*  | 1.2-7     | 2018-01-19 | CRAN (R 3.5.0)                                             |
-| spData     |     | 0.2.8.3   | 2018-03-25 | CRAN (R 3.5.0)                                             |
-| stats      | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| stringi    |     | 1.1.7     | 2018-03-12 | CRAN (R 3.5.0)                                             |
-| stringr    | \*  | 1.3.1     | 2018-05-10 | CRAN (R 3.5.0)                                             |
-| tibble     | \*  | 1.4.2     | 2018-01-22 | CRAN (R 3.5.0)                                             |
-| tidyr      | \*  | 0.8.0     | 2018-01-29 | CRAN (R 3.5.0)                                             |
-| tidyselect |     | 0.2.4     | 2018-02-26 | CRAN (R 3.5.0)                                             |
-| tidyverse  | \*  | 1.2.1     | 2017-11-14 | CRAN (R 3.5.0)                                             |
-| tools      |     | 3.5.0     | 2018-04-23 | local                                                      |
-| udunits2   |     | 0.13      | 2016-11-17 | CRAN (R 3.5.0)                                             |
-| units      |     | 0.5-1     | 2018-01-08 | CRAN (R 3.5.0)                                             |
-| utils      | \*  | 3.5.0     | 2018-04-23 | local                                                      |
-| withr      |     | 2.1.2     | 2018-07-20 | Github (<jimhester/withr@fe56f20>)                         |
-| XML        |     | 3.98-1.11 | 2018-04-16 | CRAN (R 3.5.0)                                             |
-| xml2       |     | 1.2.0     | 2018-01-24 | CRAN (R 3.5.0)                                             |
-| yaml       |     | 2.1.19    | 2018-05-01 | CRAN (R 3.5.0)                                             |
+| package    | \*  | version   | date       | source                                           |
+|:-----------|:----|:----------|:-----------|:-------------------------------------------------|
+| assertthat |     | 0.2.0     | 2017-04-11 | CRAN (R 3.5.0)                                   |
+| backports  |     | 1.1.2     | 2017-12-13 | CRAN (R 3.5.0)                                   |
+| base       | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| bindr      |     | 0.1.1     | 2018-03-13 | CRAN (R 3.5.0)                                   |
+| bindrcpp   | \*  | 0.2.2     | 2018-03-29 | CRAN (R 3.5.0)                                   |
+| bitops     |     | 1.0-6     | 2013-08-17 | CRAN (R 3.5.0)                                   |
+| broom      |     | 0.4.4     | 2018-03-29 | CRAN (R 3.5.0)                                   |
+| cellranger |     | 1.1.0     | 2016-07-27 | CRAN (R 3.5.0)                                   |
+| class      |     | 7.3-14    | 2015-08-30 | CRAN (R 3.5.0)                                   |
+| classInt   |     | 0.2-3     | 2018-04-16 | CRAN (R 3.5.0)                                   |
+| cli        |     | 1.0.0     | 2017-11-05 | CRAN (R 3.5.0)                                   |
+| colorspace |     | 1.3-2     | 2016-12-14 | CRAN (R 3.5.0)                                   |
+| compiler   |     | 3.5.0     | 2018-04-23 | local                                            |
+| crayon     |     | 1.3.4     | 2017-09-16 | CRAN (R 3.5.0)                                   |
+| curl       |     | 3.2       | 2018-03-28 | CRAN (R 3.5.0)                                   |
+| datasets   | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| DBI        |     | 1.0.0     | 2018-05-02 | CRAN (R 3.5.0)                                   |
+| devtools   |     | 1.13.5    | 2018-02-18 | CRAN (R 3.5.0)                                   |
+| digest     |     | 0.6.15    | 2018-01-28 | CRAN (R 3.5.0)                                   |
+| dplyr      | \*  | 0.7.6     | 2018-06-29 | CRAN (R 3.5.1)                                   |
+| e1071      |     | 1.6-8     | 2017-02-02 | CRAN (R 3.5.0)                                   |
+| evaluate   |     | 0.10.1    | 2017-06-24 | CRAN (R 3.5.0)                                   |
+| flickr     | \*  | 1.0       | 2018-09-10 | Github (<nfox29/FlickrAPI_EABhackathon@9db1d74>) |
+| forcats    | \*  | 0.3.0     | 2018-02-19 | CRAN (R 3.5.0)                                   |
+| foreign    |     | 0.8-71    | 2018-07-20 | CRAN (R 3.5.1)                                   |
+| ggplot2    | \*  | 3.0.0     | 2018-07-03 | CRAN (R 3.5.1)                                   |
+| glue       |     | 1.3.0     | 2018-07-17 | CRAN (R 3.5.1)                                   |
+| graphics   | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| grDevices  | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| grid       |     | 3.5.0     | 2018-04-23 | local                                            |
+| gtable     |     | 0.2.0     | 2016-02-26 | CRAN (R 3.5.0)                                   |
+| haven      |     | 1.1.1     | 2018-01-18 | CRAN (R 3.5.0)                                   |
+| hms        |     | 0.4.2     | 2018-03-10 | CRAN (R 3.5.0)                                   |
+| htmltools  |     | 0.3.6     | 2017-04-28 | CRAN (R 3.5.0)                                   |
+| httr       |     | 1.3.1     | 2017-08-20 | CRAN (R 3.5.0)                                   |
+| jsonlite   |     | 1.5       | 2017-06-01 | CRAN (R 3.5.0)                                   |
+| knitr      | \*  | 1.20      | 2018-02-20 | CRAN (R 3.5.0)                                   |
+| lattice    |     | 0.20-35   | 2017-03-25 | CRAN (R 3.5.0)                                   |
+| lazyeval   |     | 0.2.1     | 2017-10-29 | CRAN (R 3.5.0)                                   |
+| lubridate  | \*  | 1.7.4     | 2018-04-11 | CRAN (R 3.5.0)                                   |
+| magrittr   |     | 1.5       | 2014-11-22 | CRAN (R 3.5.0)                                   |
+| memoise    |     | 1.1.0     | 2017-04-21 | CRAN (R 3.5.0)                                   |
+| methods    | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| mnormt     |     | 1.5-5     | 2016-10-15 | CRAN (R 3.5.0)                                   |
+| modelr     |     | 0.1.2     | 2018-05-11 | CRAN (R 3.5.0)                                   |
+| munsell    |     | 0.4.3     | 2016-02-13 | CRAN (R 3.5.0)                                   |
+| nlme       |     | 3.1-137   | 2018-04-07 | CRAN (R 3.5.0)                                   |
+| parallel   |     | 3.5.0     | 2018-04-23 | local                                            |
+| pillar     |     | 1.2.2     | 2018-04-26 | CRAN (R 3.5.0)                                   |
+| pkgconfig  |     | 2.0.1     | 2017-03-21 | CRAN (R 3.5.0)                                   |
+| plyr       |     | 1.8.4     | 2016-06-08 | CRAN (R 3.5.0)                                   |
+| psych      |     | 1.8.4     | 2018-05-06 | CRAN (R 3.5.0)                                   |
+| purrr      | \*  | 0.2.5     | 2018-05-29 | CRAN (R 3.5.1)                                   |
+| R6         |     | 2.2.2     | 2017-06-17 | CRAN (R 3.5.0)                                   |
+| raster     | \*  | 2.6-7     | 2017-11-13 | CRAN (R 3.5.1)                                   |
+| Rcpp       |     | 0.12.18   | 2018-07-23 | CRAN (R 3.5.1)                                   |
+| RCurl      |     | 1.95-4.11 | 2018-07-15 | CRAN (R 3.5.1)                                   |
+| readr      | \*  | 1.1.1     | 2017-05-16 | CRAN (R 3.5.0)                                   |
+| readxl     |     | 1.1.0     | 2018-04-20 | CRAN (R 3.5.0)                                   |
+| reshape2   |     | 1.4.3     | 2017-12-11 | CRAN (R 3.5.0)                                   |
+| rgdal      |     | 1.3-4     | 2018-08-03 | CRAN (R 3.5.1)                                   |
+| rlang      |     | 0.2.1     | 2018-05-30 | CRAN (R 3.5.1)                                   |
+| rmarkdown  |     | 1.10      | 2018-06-11 | CRAN (R 3.5.1)                                   |
+| rprojroot  |     | 1.3-2     | 2018-01-03 | CRAN (R 3.5.0)                                   |
+| rstudioapi |     | 0.7       | 2017-09-07 | CRAN (R 3.5.0)                                   |
+| rvest      |     | 0.3.2     | 2016-06-17 | CRAN (R 3.5.0)                                   |
+| scales     |     | 0.5.0     | 2017-08-24 | CRAN (R 3.5.0)                                   |
+| sf         | \*  | 0.6-3     | 2018-05-17 | CRAN (R 3.5.1)                                   |
+| sp         | \*  | 1.2-7     | 2018-01-19 | CRAN (R 3.5.0)                                   |
+| spData     |     | 0.2.8.3   | 2018-03-25 | CRAN (R 3.5.0)                                   |
+| stats      | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| stringi    |     | 1.1.7     | 2018-03-12 | CRAN (R 3.5.0)                                   |
+| stringr    | \*  | 1.3.1     | 2018-05-10 | CRAN (R 3.5.0)                                   |
+| tibble     | \*  | 1.4.2     | 2018-01-22 | CRAN (R 3.5.0)                                   |
+| tidyr      | \*  | 0.8.0     | 2018-01-29 | CRAN (R 3.5.0)                                   |
+| tidyselect |     | 0.2.4     | 2018-02-26 | CRAN (R 3.5.0)                                   |
+| tidyverse  | \*  | 1.2.1     | 2017-11-14 | CRAN (R 3.5.0)                                   |
+| tools      |     | 3.5.0     | 2018-04-23 | local                                            |
+| udunits2   |     | 0.13      | 2016-11-17 | CRAN (R 3.5.0)                                   |
+| units      |     | 0.5-1     | 2018-01-08 | CRAN (R 3.5.0)                                   |
+| utils      | \*  | 3.5.0     | 2018-04-23 | local                                            |
+| withr      |     | 2.1.2     | 2018-07-20 | Github (<jimhester/withr@fe56f20>)               |
+| XML        |     | 3.98-1.11 | 2018-04-16 | CRAN (R 3.5.0)                                   |
+| xml2       |     | 1.2.0     | 2018-01-24 | CRAN (R 3.5.0)                                   |
+| yaml       |     | 2.1.19    | 2018-05-01 | CRAN (R 3.5.0)                                   |
 
 Van Zanten, Boris T., Peter H. Verburg, Mark J. Koetse, and Pieter J H Van Beukering. 2014. “Preferences for European agrarian landscapes: A meta-analysis of case studies.” *Landscape and Urban Planning* 132. Elsevier B.V.: 89–101. doi:[10.1016/j.landurbplan.2014.08.012](https://doi.org/10.1016/j.landurbplan.2014.08.012).
 

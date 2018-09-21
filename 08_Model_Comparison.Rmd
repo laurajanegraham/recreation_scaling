@@ -19,16 +19,37 @@ library(broom)
 library(MuMIn)
 library(knitr)
 library(tidyverse)
+library(patchwork)
 
 # resolutions
-rlns <- c("1km", "5km", "10km", "25km", "50km", "100km")
+rlns_eng <- c("1km", "5km", "10km", "25km", "50km", "100km")
+rlns_wbess <- c("1km", "5km", "10km")
 
-# study extent (for now this is England, will need extending to Europe)
-study_ext_sf <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp", quiet = TRUE) %>% 
+# study extent for England
+study_ext_eng_sf <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp", quiet = TRUE) %>% 
   filter(NAME_1 == "England") %>% 
   st_transform(crs = 3035)
 
-study_ext <- as(study_ext_sf, "Spatial")
+study_ext_eng <- as(study_ext_eng_sf, "Spatial")
+
+# study extent for the WBESS data
+# currently based on a 10km resolution. Change if we change the resolutions at all
+study_ext_wbess <- c(xmin = 3463525, xmax = 3523525, ymin = 3162900, ymax = 3232900)
+
+coords = matrix(c(study_ext_wbess[1], study_ext_wbess[3],
+               study_ext_wbess[1], study_ext_wbess[4],
+               study_ext_wbess[2], study_ext_wbess[4],
+               study_ext_wbess[2], study_ext_wbess[3],
+               study_ext_wbess[1], study_ext_wbess[3]), 
+             ncol = 2, byrow = TRUE)
+
+
+P1 = Polygon(coords)
+study_ext_wbess = SpatialPolygons(list(Polygons(list(P1), ID = "a")), proj4string=crs(study_ext_eng))
+
+theme_set(theme_bw(base_size = 10) + theme(strip.background = element_blank(), 
+                             panel.grid.major = element_blank(),
+                             panel.grid.minor = element_blank()))
 ```
 
 ## Data collating
@@ -36,35 +57,50 @@ study_ext <- as(study_ext_sf, "Spatial")
 We're making one big dataframe of the response (Flickr photo locations) and covariates (proportion of non-built land covers, land-cover diversity, mean elevation, topographic variation and population density) at each of the analysis resolutions. 
 
 ```{r get_data}
-get_df <- function(rln) {
+get_df <- function(rln, study_ext, wbess = FALSE) {
   # list all files of specified resolution
   fnames <- list.files("data/response", pattern = paste0("_", rln), full.names = TRUE)
   
+  if(!wbess) {
+    wbess_file <- list.files("data/response", pattern = paste0("wbess_", rln), full.names = TRUE)
+    fnames <- fnames[fnames != wbess_file]
+  }
+  #cropping before the stack because wbess only at small extent
+  dat <- lapply(fnames, function(x) {
+    crop(raster(x), study_ext)
+  })
+  
   #fnames <- fnames[!str_detect(fnames, "mene")]
   # stack them
-  dat <- stack(fnames)
-  
-  # crop by study extent
-  dat <- crop(dat, study_ext)
-  
+  dat <- stack(dat)
+
   # get into a dataframe
   df <- as.data.frame(dat, xy = TRUE) %>% 
     rename_all(funs(str_replace_all(., paste0("_", rln), ""))) %>% 
-    na.omit %>% 
+    #na.omit %>% 
     mutate(resolution = rln)
   
   return(df)
 }
 
 # dataframe with obs for all data
-df <- map_dfr(rlns, get_df) %>% 
+
+df_eng <- map_dfr(rlns_eng, get_df, study_ext_eng) %>% 
   mutate(resolution = factor(resolution, 
                              levels = c("1km", 
                                         "5km", 
                                         "10km", 
                                         "25km", 
                                         "50km", 
-                                        "100km")))
+                                        "100km")),
+         extent = "England")
+
+df_wbess <- map_dfr(rlns_wbess, get_df, study_ext_wbess, TRUE) %>% 
+  mutate(resolution = factor(resolution, 
+                             levels = c("1km", 
+                                        "5km", 
+                                        "10km")),
+         extent = "WBess")
 ```
 
 ## Data comparison
@@ -72,35 +108,88 @@ df <- map_dfr(rlns, get_df) %>%
 How well does the Flickr data predict the MENE data, and where do they differ. 
 
 ```{r}
-ggplot(df, aes(x = eng_flickr, y = mene)) +
+p1 <- ggplot(df_eng, aes(x = flickr, y = mene)) +
   geom_point() + 
   geom_smooth(method = "lm") + 
-  facet_wrap(~resolution, scale = "free")
+  facet_wrap(~resolution, scale = "free", nrow = 1)
+
+p2 <- ggplot(df_wbess, aes(x = mene, y = wbess)) +
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~resolution, scale = "free", nrow = 1)
+
+p3 <- ggplot(df_wbess, aes(x = flickr, y = wbess)) +
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~resolution, scale = "free", nrow = 1)
+
+p1 / (p2 | p3) + plot_annotation(tag_levels = "a", tag_suffix = ")")
 ```
 
 Let's fit some linear models so we can look at the overall fit. 
 
 ```{r mene_flickr_mods}
-fit_mod <- function(dat) {
-  lm(mene ~ eng_flickr,
+fit_mod_mf <- function(dat) {
+  lm(mene ~ flickr,
       data = dat)
 }
 
-mod <- df %>% 
+fit_mod_wf <- function(dat) {
+  lm(wbess ~ flickr,
+      data = dat)
+}
+
+fit_mod_wm <- function(dat) {
+  lm(wbess ~ mene,
+      data = dat)
+}
+
+mod_mf<- df_eng %>% 
   group_by(resolution) %>% 
   nest() %>% 
-  mutate(mod = map(data, fit_mod),
+  mutate(mod = map(data, fit_mod_mf),
          mod_glance = map(mod, glance),
          mod_resids = map(mod, function(x) x$residuals))
 
-mod_r2 <- mod %>%
+mod_wf<- df_wbess %>% 
+  group_by(resolution) %>% 
+  nest() %>% 
+  mutate(mod = map(data, fit_mod_wf),
+         mod_glance = map(mod, glance),
+         mod_resids = map(mod, function(x) x$residuals))
+
+mod_wm<- df_wbess %>% 
+  group_by(resolution) %>% 
+  nest() %>% 
+  mutate(mod = map(data, fit_mod_wm),
+         mod_glance = map(mod, glance),
+         mod_resids = map(mod, function(x) x$residuals))
+
+mod_mf_r2 <- mod_mf %>%
   select(resolution, mod_glance) %>% 
   unnest() %>% 
-  select(resolution, r.squared)
+  select(resolution, r.squared) %>% 
+  mutate(mod = "MENE vs Flickr")
+
+mod_wf_r2 <- mod_wf %>%
+  select(resolution, mod_glance) %>% 
+  unnest() %>% 
+  select(resolution, r.squared) %>% 
+  mutate(mod = "Wessex BESS vs Flickr")
+
+mod_wm_r2 <- mod_wm %>%
+  select(resolution, mod_glance) %>% 
+  unnest() %>% 
+  select(resolution, r.squared) %>% 
+  mutate(mod = "Wessex BESS vs MENE")
+
+mod_r2 <- bind_rows(mod_mf_r2, mod_wf_r2) %>% 
+  bind_rows(mod_wm_r2) %>% 
+  mutate(resolution = factor(resolution, levels = c("1km", "5km", "10km", "25km", "50km", "100km")))
 ```
 
-```{r}
-ggplot(mod_r2, aes(x = resolution, y = r.squared, group = 1)) + 
+```{r, fig.height = 3.5}
+ggplot(mod_r2, aes(x = resolution, y = r.squared, colour = mod, group = mod)) + 
   geom_point() + 
   stat_summary(fun.y=sum, geom="line")
 ```
@@ -114,19 +203,24 @@ Fine resolution mene data picks out dog walkers, flickr data picks out "nice"/ae
 We can use the residuals to look at where the data sources differ.  
 
 ```{r, fig.width = 15, fig.height = 10}
-resids <- mod %>% 
+resids <- mod_mf %>% 
   select(resolution, data, mod_resids) %>% 
-  unnest()
+  unnest() %>% 
+  group_by(resolution) %>% 
+  nest() %>% 
+  mutate(plots = map(data, function(x) {
+    ggplot() + 
+           geom_raster(data = x, 
+                       aes(x = x, y = y, fill = mod_resids)) + 
+           geom_sf(data = study_ext_eng_sf, fill = NA) + 
+           scale_fill_gradient2("Residuals") + 
+           theme(axis.title = element_blank(), 
+                 axis.text = element_blank(),
+                 axis.ticks = element_blank())
+    }))
 
-ggplot() + 
-  geom_raster(data = mod_resids, 
-              aes(x = x, y = y, fill = diff)) + 
-  geom_sf(data = study_ext_sf, fill = NA) + 
-  facet_wrap(~resolution) + 
-  scale_fill_gradient2("Residuals") + 
-  theme(axis.title = element_blank(), 
-        axis.text = element_blank(),
-        axis.ticks = element_blank())
+resids$plots[[1]] + resids$plots[[2]] + resids$plots[[3]] + resids$plots[[4]] + resids$plots[[5]] + resids$plots[[6]]
+
 ```
 
 Negative residuals show us areas which are over-represented by MENE records, negative residuals show us areas that are over-represented by Flickr records. More areas over-represented by Flickr at all resolutions. 

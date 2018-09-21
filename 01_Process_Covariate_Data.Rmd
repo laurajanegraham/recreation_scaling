@@ -18,7 +18,7 @@ library(doParallel)
 library(knitr)
 
 # Analysis resolutions
-rln <- c(1, 5, 10, 25, 50, 100)
+rln <- c(1, 2, 5, 10, 25, 50, 100)
 
 # Calculate the number of cores
 no_cores <- detectCores() - 1
@@ -32,11 +32,11 @@ We are creating a dataset of social-ecological covariates at a range of spatial 
 
 We use [EU-DEM v1.1](https://land.copernicus.eu/pan-european/satellite-derived-products/eu-dem/eu-dem-v1.1/view) at 100m resolution to calculate topographic variability at each resolution. Note that we are using a version that we previously aggregated (mean) to 100m resolution to reduce processing time. We may wish to revisit. 
 
-```{r dem_data, eval = FALSE}
+```{r dem_data}
 dem <- raster("~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif")
 ```
 
-```{r dem_var, eval = FALSE}
+```{r dem_var}
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("dem"))
@@ -54,7 +54,7 @@ out <- parLapply(cl, rln, function(x) {
 stopCluster(cl)
 ```
 
-```{r dem_mean, eval = FALSE}
+```{r dem_mean}
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("dem"))
@@ -75,7 +75,7 @@ stopCluster(cl)
 
 We use [Corine Land Cover 2012](https://land.copernicus.eu/pan-european/corine-land-cover/clc-2012) at 100m resolution to calculate land-cover proportions and diversity at each resolution. 
 
-```{r clc_data, eval = FALSE}
+```{r clc_data}
 align_rasters(unaligned = "C:/Users/lg1u16/DATA/LULC/clc2012/g100_clc12_V18_5.tif", 
               reference = "C:/Users/lg1u16/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif",
               dstfile = "data/covariates/clc_100m.tif",
@@ -90,7 +90,7 @@ clc <- raster("data/covariates/clc_100m.tif")
 
 ### Land-cover diversity
 
-```{r clc_shei, eval = FALSE}
+```{r clc_shei}
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("clc"))
@@ -108,33 +108,12 @@ out <- parLapply(cl, rln, function(x) {
 stopCluster(cl)
 ```
 
-### Proportion of non-built land covers
-
-Initially used, my be dropped, this groups together all non-artificial land covers. 
-
-```{r clc_prop, eval = FALSE}
-# Initiate cluster
-cl <- makeCluster(no_cores)
-clusterExport(cl, c("clc"))
-clusterEvalQ(cl, c("raster"))
-
-out <- parLapply(cl, rln, function(x) {
-  fname <- paste0("data/covariates/clc_prop_", x, "km.tif")
-  raster::aggregate(clc, (x*1000)/100, 
-            fun=function(y, ...) sum(y %in% 10:44), 
-            filename = fname,
-            overwrite = TRUE)
-})
-
-stopCluster(cl)
-```
-
 ### Proportion of amenity land cover
 
 - green urban areas (10)
 - sport and leisure facilities (11)
 
-```{r clc_amenity, eval = FALSE}
+```{r clc_amenity}
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("clc"))
 clusterEvalQ(cl, c("raster"))
@@ -272,13 +251,13 @@ We use [Population density disaggregated with Corine land cover 2000](https://ww
 ```{r pop_data, eval = FALSE}
 align_rasters(unaligned = "C:/Users/lg1u16/DATA/SOCIAL/EEA_gridded_population/popu01clcv5.tif", 
                      reference = "C:/Users/lg1u16/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif",
-                     dstfile = "data/pop_100m.tif",
+                     dstfile = "data/covariates/pop_100m.tif",
                      nThreads = "ALL_CPUS")
-
-pop <- raster("data/pop_100m.tif")
 ```
 
-```{r pop_total, eval = FALSE}
+```{r pop_total}
+pop <- raster("data/covariates/pop_100m.tif")
+
 # Initiate cluster
 cl <- makeCluster(no_cores)
 clusterExport(cl, c("pop"))
@@ -286,7 +265,7 @@ clusterEvalQ(cl, "raster")
 
 # aggregate to each resolution
 out <- parLapply(cl, rln, function(x) {
-  fname <- paste0("data/pop_", x, "km.tif")
+  fname <- paste0("data/covariates/pop_", x, "km.tif")
   raster::aggregate(pop, (x*1000)/100, 
             fun=sum, 
             filename = fname,

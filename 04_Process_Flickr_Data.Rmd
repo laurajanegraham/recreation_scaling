@@ -18,6 +18,7 @@ library(knitr)
 library(sf)
 library(flickr)
 library(lubridate)
+library(furrr)
 ```
 
 
@@ -31,28 +32,64 @@ There are a couple of options.
 
 Start with option 2. 
 
-I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages. Will build up on this using the tested keywords [@VanZanten2014]. 
+I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages [this doesn't work - trying for just `nature` and will see how that goes]. Will build up on this using the tested keywords [@VanZanten2014]. 
+
+```{r keywords}
+kw_landscape <- c("nature", "landscape", 
+                  "cultural landscape", "cultural land", "hill",
+                  "mountain", "valley", "basin", "highland",
+                  "ridge", "cliff", "peak", "gorge",
+                  "glacier", "beach", "shore", "coast",
+                  "sea", "ocean", "wetland", "river", "dike",
+                  "brook", "lake", "waterfall", "dune",
+                  "swamp", "pond", "ditch", "channel",
+                  "estuary", "creek", "forest", "tree",
+                  "woods", "canopy", "grove", "hedgerow",
+                  "bush", "meadow", "grassland", "pasture",
+                  "countryside", "prairie", "maize",
+                  "corn", "wheat", "oats", "livestock", "cattle",
+                  "cow"," sheep", "orchard", "field",
+                  "vineyard", "crops", "cropland", "grazing",
+                  "heather", "heath", "heathland",
+                  "park", "peat", "peatland", "peatbog",
+                  "marsh", "marshes", "marshland",
+                  "moor", "moors", "moorland", "shrubs",
+                  "shrubland")
+
+kw_ambig <- c("relax", "cruising", "relaxing", "beauty",
+              "beautiful", "magnificence", "magnificent",
+              "splendour", "brilliance", "brilliant",
+              "inspiring", "inspired", "sublime",
+              "gorgeous", "outstanding", "enjoying",
+              "breathtaking", "enchanting")
+
+kw_unambig <- c("walk", "walking", "hike", "hiking",
+                "camp", "camping", "recreation", "cycling",
+                "horse riding", "fishing", "mountain biking", 
+                "bike riding", "run", "running",
+                "hunt", "hunting", "tourism",
+                "climbing", "trekking", "mountaineering",
+                "skiing", "sailing", "rowing", "jogging",
+                "outdoor", "vista", "panorama",
+                "scene", "scenic", "scenery", "view",
+                "viewpoint", "heritage", "historic value")
+```
+
+```{r get_photos, message = FALSE}
+kw_search <- c(kw_ambig, kw_unambig)
+
+photos <- NULL
+
+for(kw in kw_search) {
+  p <- photosSearch(year_range = c(2009, 2017),
+               text = kw,
+               woe_id = 24554868) %>% 
+    select(-page) %>% 
+    bind_rows(photos) %>% 
+    distinct
+}
 
 
-```{r get_photos}
-study_ext <- st_read("~/DATA/ADMINISTRATIVE/europe/Europe_coastline.shp") %>% 
-  st_transform(crs = 4326)
-
-grid_include <- st_make_grid(study_ext, cellsize = 5) %>% 
-  st_intersects(study_ext) %>% 
-  map_dbl(function(x) ifelse(is_empty(x), 0, x))
-
-study_grid <- st_make_grid(study_ext, cellsize = 5) %>% 
-  st_sf %>% 
-  mutate(grid_include = grid_include) %>% 
-  filter(grid_include == 1)
-
-photos <- map_dfr(study_grid[1:5,], function(x) {
-  photosSearch(year_range = c(2009, 2017),
-               text = 'natur*',
-               bbox = st_bbox(x)
-  )
-})
 
 photos_sf <- photos %>% 
   select(long = as.numeric.longitude.,
@@ -64,17 +101,9 @@ photos_sf <- photos %>%
   st_transform(crs = 3035)
 
 photos_sp <- as(photos_sf, "Spatial")
-
-
-
-# testing
-photos <- photosSearch(year_range = c(2016, 2017),
-                        text = 'natur*',
-                        woe_id = 24865675)
-	
 ```
 
-We need to convert from points to raster at the 6 analysis resolutions. In order to do so, we want the unique owner date combinations. 
+We need to convert from points to raster at the analysis resolutions. In order to do so, we want the unique owner date combinations. 
 
 ```{r photo_rasters}
 # loop through the dem files to get rasters for the visits
@@ -92,6 +121,10 @@ for(f in fnames) {
                        overwrite = TRUE)
 }
 ```
+
+These are lists of keywords from [@VanZanten2014]. They filtered photos that contained at least one of both kw_landscape and kw_ambig, and all keywords from kw_unambig. Best way to do this would be to get all photos from one set (e.g. kw_landscape), and then use `stringr` to filter the tags to ensure at least one of kw_ambig is contained in the tags). 
+
+
 
 ## Session Info
 

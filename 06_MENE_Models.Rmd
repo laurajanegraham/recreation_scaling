@@ -11,7 +11,6 @@ knitr::opts_chunk$set(echo = TRUE,
 ```
 
 ```{r load_packages}
-library(e1071) # optimising transformations (skewness function)
 library(MASS)
 library(raster)
 library(sf)
@@ -45,7 +44,16 @@ source("code/hier.part.nb.R")
 
 ## Data collating
 
-We're making one big dataframe of the response (MENE visits) and  covariates (proportion of non-built land covers, land-cover diversity, mean elevation, topographic variation and population density) at each of the analysis resolutions. 
+We're making one big dataframe of the response (MENE visits) and covariates at each of the analysis resolutions. 
+
+
+Covariates are:
+
+- Proportion of agricultural land cover (clc_agri; supply)
+- Proporiton of natural land covers (clc_prop; supply)
+- Diversity of land-cover types (clc_shei; supply)
+- Mean elevation (dem_mean; supply)
+
 
 ```{r get_data}
 get_df <- function(rln) {
@@ -59,7 +67,7 @@ get_df <- function(rln) {
   # crop and mask by study extent - mask will get rid of most of the coastal cells
   # NB need to find out what rule mask actually applies
   dat <- crop(dat, study_ext)
-  dat <- mask(dat, study_ext)
+  #dat <- mask(dat, study_ext)
   
   # get into a dataframe
   df <- as.data.frame(dat, xy = TRUE) %>% 
@@ -156,8 +164,6 @@ df_narrow$boxplots
 
 ### Data scaling and transformation
 
-Currently the transformations are commented out. Will need to check at the linearity checking and model checking stages. 
-
 ```{r transform}
 df_scaled <- df %>% group_by(resolution) %>% 
   nest() %>% 
@@ -176,9 +182,6 @@ means <- df_scaled %>%
   group_by(resolution) %>% 
   summarise_all(funs(mean, sd)) %>% 
   gather(key, value, -resolution) 
-# %>% 
-  # separate(key, into=c("covariate", "measure")) %>% 
-  # spread(measure, value)
 ```
 
 ### Correlation between variables
@@ -243,7 +246,7 @@ No huge departures from linearity, might want to check against mean elevation (d
 
 ## Statistical Models
 
-We fit a Poisson glm for each resolution with proportion of agricultural land covers; proportion of natural land covers; diversity of land cover; mean elevation; and population as covariates. 
+We fit a negative binomial glm for each resolution with proportion of agricultural land covers; proportion of natural land covers; diversity of land cover; mean elevation; and population as covariates. 
 
 We use variance partitioning to examing the relative importance of each predictor with the model. 
 
@@ -351,12 +354,13 @@ mod_stats <- mod %>%
   dplyr::select(resolution, mod_stats) %>% 
   unnest()
 
-mod %>%
+mene_aic <- mod %>%
   mutate(mod_full_aic = map_dbl(mod_full, function(x) x$aic),
          mod_demand_aic = map_dbl(mod_demand, function(x) x$aic),
          mod_supply_aic = map_dbl(mod_supply, function(x) x$aic)) %>% 
-  select(resolution, mod_full_aic, mod_demand_aic, mod_supply_aic) %>% 
-  kable()
+  select(resolution, mod_full_aic, mod_demand_aic, mod_supply_aic)
+mene_aic %>% kable
+write_csv(mene_aic, "doc/table2_mene_aic.csv")
 ```
 
 In all cases except 50km resolution the full (supply & demand) model is the best performing model as judged by AIC. At 50km resolution, technically the demand model would be judged the best model; however, there is very little in it. In all cases except 1km resolution, the demand model is better than the supply model. This fits with our later conclusions about the 1km model not really capturing demand at the appropriate scale. 
@@ -372,8 +376,6 @@ ggplot(mod_D2, aes(x = resolution, y = D2, group = 1)) +
 Explanatory power of the model increases greatly between 1km and 5km resolutions (with increasing explanatory power as resolution increases, as to be expected). Might be best to drop the 1km model. The lack of explanatory power in the 1km model does lend itself to the suggestion that at fine resolutions, we need to consider more bespoke options. Also, this likely has a lot to do with the scale of both supply and demand (e.g. point-based models of recreation will consider buffers around points to capture this). 
 
 ### Variance partitioning
-
-Using package `hier.part`
 
 ```{r}
 p1 <- ggplot(mod_D2, aes(x = resolution, y = D2)) + 
