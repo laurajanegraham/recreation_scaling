@@ -16,9 +16,10 @@ library(raster)
 library(tidyverse)
 library(knitr)
 library(sf)
-library(flickr)
 library(lubridate)
 library(furrr)
+
+source("code/flickr.R")
 ```
 
 
@@ -32,7 +33,9 @@ There are a couple of options.
 
 Start with option 2. 
 
-I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. Will need to think about how to extract for all of Europe (WOE ID for Europe is 24865675). I'm just using the keyword `natur*` to account for a reasonable number of European languages [this doesn't work - trying for just `nature` and will see how that goes]. Will build up on this using the tested keywords [@VanZanten2014]. 
+I'm going to start with just England for the years 2009-2017 to be comparable to the MENE data. 
+
+These are lists of keywords from [@VanZanten2014]. They filtered photos that contained at least one of both kw_landscape and kw_ambig, and all keywords from kw_unambig. Best way to do this would be to get all photos from one set (e.g. kw_landscape), and then use `stringr` to filter the tags to ensure at least one of kw_ambig is contained in the tags). 
 
 ```{r keywords}
 kw_landscape <- c("nature", "landscape", 
@@ -76,28 +79,38 @@ kw_unambig <- c("walk", "walking", "hike", "hiking",
 ```
 
 ```{r get_photos, message = FALSE}
-kw_search <- c(kw_ambig, kw_unambig)
-
-photos <- NULL
-
-for(kw in kw_search) {
-  p <- photosSearch(year_range = c(2009, 2017),
-               text = kw,
-               woe_id = 24554868) %>% 
-    select(-page) %>% 
-    bind_rows(photos) %>% 
-    distinct
+for(kw in kw_unambig) {
+  print(kw)
+  p <- photo_by_tag(year_range = c(2009, 2017),
+                    tags = kw,
+                    woe_id = 24554868)
+  save(p, file = paste0("data/flickr/", kw, ".Rda"))
 }
 
+for(kw in kw_ambig){
+  
+  p <- photo_by_tag(year_range = c(2009, 2017),
+                    tags = kw,
+                    woe_id = 24554868) %>% 
+    mutate(photo_tags = str_split(photo_tags, pattern = " "),
+           match = map_dbl(photo_tags, function(x) sum(x %in% kw_landscape))) %>% 
+    filter(match > 0) %>% 
+    select(-match)
+  
+  save(p, file = paste0("data/flickr/", kw, ".Rda"))
+}
+```
 
+```{r photo_shp, message = FALSE}
+f <- list.files("data/flickr/", full.names = TRUE)
 
-photos_sf <- photos %>% 
-  select(long = as.numeric.longitude.,
-         lat = as.numeric.latitude.,
-         owner,
-         datetaken) %>% 
+photos_sf <- map_dfr(f, function(x) {
+  x %>% load %>% get %>% 
+    select(longitude, latitude, owner, datetaken)
+  }) %>% 
   mutate(owner_date = paste(owner, date(datetaken), sep="_")) %>% 
-  st_as_sf(coords = c("long", "lat"), crs = 4326) %>% 
+  distinct() %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
   st_transform(crs = 3035)
 
 photos_sp <- as(photos_sf, "Spatial")
@@ -121,10 +134,6 @@ for(f in fnames) {
                        overwrite = TRUE)
 }
 ```
-
-These are lists of keywords from [@VanZanten2014]. They filtered photos that contained at least one of both kw_landscape and kw_ambig, and all keywords from kw_unambig. Best way to do this would be to get all photos from one set (e.g. kw_landscape), and then use `stringr` to filter the tags to ensure at least one of kw_ambig is contained in the tags). 
-
-
 
 ## Session Info
 
