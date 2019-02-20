@@ -13,16 +13,16 @@ hier.part.nb <- function (y, xcan, gof = "RMSPE")
 
 all.regs.nb <- function (y, xcan, gof = "RMSPE", print.vars = FALSE) 
 {
-  
+  con <- gamlss.control(trace = FALSE)
   pcan <- dim(xcan)[2]
   n <- (2^pcan) - 1
   combs <- combos1.nb(pcan)$ragged
   
   if (gof == "RMSPE") 
-    gfs <- sqrt(sum((MASS::glm.nb(y ~ 1)$fitted.values - 
+    gfs <- sqrt(sum((fitted.values(gamlss::gamlss(y ~ 1, family = NBI, control = con)) - 
                        y)^2))
   if (gof == "logLik") 
-    gfs <- as.vector(logLik(MASS::glm.nb(y ~ 1)))
+    gfs <- as.vector(logLik(gamlss::gamlss(y ~ 1, family = NBI, control = con)))
   
   for (i in 1:n) {
     if (i%%500 == 0) 
@@ -38,6 +38,7 @@ all.regs.nb <- function (y, xcan, gof = "RMSPE", print.vars = FALSE)
 
 current.model.nb <- function (y, current.comb, xcan, gof = "RMSPE") 
 {
+  con <- gamlss.control(trace = FALSE)
   comb.data <- data.frame(xcan[, current.comb])
   colnames(comb.data) <- colnames(xcan)[current.comb]
   data <- data.frame(y, comb.data)
@@ -50,10 +51,10 @@ current.model.nb <- function (y, current.comb, xcan, gof = "RMSPE")
   xss <- paste(xs, collapse = " ", sep = "")
   formu <- formula(paste(depv, "~", xss, sep = ""))
   if (gof == "RMSPE") 
-    gf <- sqrt(sum((MASS::glm.nb(formu, data = data)$fitted.values - 
+    gf <- sqrt(sum((fitted.values(gamlss::gamlss(formu, data = data, family = NBI, control = con)) - 
                       y)^2))
   if (gof == "logLik") 
-    gf <- as.vector(logLik(MASS::glm.nb(formu, data = data)))
+    gf <- as.vector(logLik(gamlss::gamlss(formu, data = data, family = NBI, control = con)))
   gf
 }
 
