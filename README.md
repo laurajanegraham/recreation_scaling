@@ -8,11 +8,11 @@ Scale dependencies in the relationship between recreation and social-ecological 
 - Monitor of Engagement with the Natural Environment, Natural England
 - Flickr photographs (keyword search)
 
-We will look at how the relationship with socio-economic and environmental variables changes by: 
+We look at how the relationship with socio-economic and environmental variables changes by: 
 
 1. Data source
 2. Study resolution
 
-To replicate the analysis in the paper, run [Process_Data.Rmd](Process_Data.Rmd) followed by [main.Rmd](main.Rmd). 
+To replicate the analysis in the paper, [main.Rmd](main.Rmd). The data processing steps can be viewed in [Process_Data.Rmd](Process_Data.Rmd). Note that the data will need to be downloaded from the individual sources (links in file). 
 
 Paper from [SCALEFORES project](https://www.southampton.ac.uk/geography/research/projects/scalefores.page).

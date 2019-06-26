@@ -1,5 +1,5 @@
 ---
-title: "Process Covariate Data"
+title: "Process Data"
 output: github_document
 ---
 
@@ -37,7 +37,7 @@ no_cores <- detectCores() - 1
 
 ## General details
 
-We are creating a dataset of social-ecological covariates at a range of spatial resolutions: 5km, 10km, 25km, 50km. All data are open. 
+We are creating a dataset of social-ecological covariates at a range of spatial resolutions: 5km, 10km, 25km, 50km. All data are open except for Land Cover Map 2015. 
 
 ## Land-cover data
 
@@ -179,7 +179,7 @@ stopCluster(cl)
 
 ## Population data
 
-We use [Population density disaggregated with Corine land cover 2000](https://www.eea.europa.eu/data-and-maps/data/population-density-disaggregated-with-corine-land-cover-2000-2) at 100m resolution to calculate total population at each resolution. 
+We use [OpenPopGrid](http://openpopgrid.geodata.soton.ac.uk/) at 10m resolution to calculate total population at each resolution. 
 
 ```{r pop_data}
 f <- list.files("~/DATA/SOCIAL/OpenPopGrid", pattern = "*.asc", full.names = TRUE)
@@ -189,7 +189,6 @@ cl <- makeCluster(no_cores)
 clusterExport(cl, c("f"))
 clusterEvalQ(cl, "raster")
 
-# aggregate to each resolution
 out <- parLapply(cl, f, function(x) {
   fname <- gsub(".asc", ".tif", x)
   r <- raster::raster(x, crs = '+init=EPSG:27700')
@@ -285,13 +284,7 @@ We have two response variables and these will be calculated at the same 4 resolu
 
 ## Flickr photograph density
 
-There are a couple of options. 
-
-1. The approach used by InVEST [@Wood2013g], where all 'photo user days' are included. I worry that this will include a lot of non-recreational photos and bias the results towards cities, although their paper found good correlation between photo user days and income from recreation (but this included non-natural rec). 
-
-2. An approach where photos are filtered using keywords in a number of languages [@VanZanten2014]. The keywords are included in the supplementary materials for this paper. We can use the in development [flickr](https://github.com/FrancescaMancini/FlickrAPI_EABhackathon) package for R, 
-
-We are using option 2. 
+We filter photos using keywords in a number of languages following @VanZanten2014. The keywords are included in the supplementary materials for this paper. Code used to get photos from Flickr is an early version of [`photosearcher`](https://nfox29.github.io/photosearcher/), developed by Nathan Fox, Tom August, Francesca Martini and Laura Graham. 
 
 We will get photograph metadata for England for the years 2009-2017 to be comparable to the MENE data. 
 
