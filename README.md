@@ -13,6 +13,6 @@ We look at how the relationship with socio-economic and environmental variables 
 1. Data source
 2. Study resolution
 
-To replicate the analysis in the paper, [main.Rmd](main.Rmd). The data processing steps can be viewed in [Process_Data.Rmd](Process_Data.Rmd). Note that the data will need to be downloaded from the individual sources (links in file). 
+To replicate the analysis in the paper, [main.Rmd](main.Rmd). The data processing steps can be viewed in [Process_Data.Rmd](Process_Data.Rmd). Note that the data will need to be downloaded from the individual sources to run Process_Data.Rmd (links in file). The data required for the main.Rmd analysis is in `data/`
 
 Paper from [SCALEFORES project](https://www.southampton.ac.uk/geography/research/projects/scalefores.page).
