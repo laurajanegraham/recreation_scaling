@@ -1,5 +1,6 @@
 Scale-dependency in drivers of outdoor recreation in England
 ===
+[![DOI](https://zenodo.org/badge/144981828.svg)](https://zenodo.org/badge/latestdoi/144981828)
 
 This is the repository for the analysis code for Graham & Eigenbrod (in press). 
 
